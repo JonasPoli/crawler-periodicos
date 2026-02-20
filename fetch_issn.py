@@ -73,6 +73,27 @@ def extract_issn_from_soup(soup):
             if m and not issn_electronic:
                 issn_electronic = m.group(1)
     
+    # --- Strategy 2.5: ISSN inside highlighted HTML tags (strong, b, span, em) ---
+    # e.g. <strong>ISSN 2595-3621</strong>
+    if not issn_print or not issn_electronic:
+        for tag in soup.find_all(['strong', 'b', 'span', 'em']):
+            tag_text = tag.get_text().strip()
+            if 'issn' in tag_text.lower():
+                m = ISSN_RE.search(tag_text)
+                if m:
+                    issn_val = m.group(1)
+                    tag_lower = tag_text.lower()
+                    if 'print' in tag_lower or 'impresso' in tag_lower:
+                        if not issn_print:
+                            issn_print = issn_val
+                    elif 'electr' in tag_lower or 'eletrôn' in tag_lower or 'online' in tag_lower or 'e-issn' in tag_lower or 'eissn' in tag_lower:
+                        if not issn_electronic:
+                            issn_electronic = issn_val
+                    else:
+                        # Generic "ISSN XXXX-XXXX" without qualifier
+                        if not issn_electronic:
+                            issn_electronic = issn_val
+
     # --- Strategy 3: Free text patterns ---
     full_text = soup.get_text()
     
