@@ -69,6 +69,7 @@
                         <th>Nome</th>
                         <th>ISSN / Impresso</th>
                         <th>Qualis</th>
+                        <th class="text-center">Sucupira</th>
                         <th>URL</th>
                         <th class="text-center">E-mails</th>
                         <th>Status</th>
@@ -86,6 +87,30 @@
                             <small class="text-muted">{{ journal.issn_print or '-' }}</small>
                         </td>
                         <td><span class="badge bg-primary">{{ journal.qualis or '-' }}</span></td>
+                        <td class="text-center">
+                            {% set form_issn = journal.issn_print or journal.issn_electronic or journal.issn %}
+                            {% if form_issn %}
+                            <form method="post"
+                                action="https://sucupira.capes.gov.br/sucupira/public/consultas/coleta/veiculoPublicacaoQualis/listaConsultaGeralPeriodicos.jsf"
+                                target="_blank" class="m-0 p-0 d-inline-block">
+                                <input type="hidden" name="form" value="form">
+                                <input type="hidden" name="form:evento" value="237">
+                                <input type="hidden" name="form:area" value="0">
+                                <input type="hidden" name="form:checkIssn" value="on">
+                                <input type="hidden" name="form:issn:issn" value="{{ form_issn }}">
+                                <input type="hidden" name="form:estrato" value="0">
+                                <input type="hidden" name="form:consultar" value="Consultar">
+                                <input type="hidden" name="javax.faces.ViewState"
+                                    value="19974219038191275:3189982193930427832">
+                                <button type="submit" class="badge bg-secondary border-0 ext-dark text-decoration-none"
+                                    title="Buscar no Sucupira" style="cursor: pointer;">
+                                    <i class="fas fa-search"></i>
+                                </button>
+                            </form>
+                            {% else %}
+                            <span class="text-muted">-</span>
+                            {% endif %}
+                        </td>
                         <td><a href="{{ journal.url }}" target="_blank">Link</a></td>
                         <td class="text-center">
                             {% if journal.email_count > 0 %}
