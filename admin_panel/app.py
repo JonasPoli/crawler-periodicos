@@ -152,6 +152,50 @@ def list_journals():
         else:
             query = query.filter(Journal.qualis == f_qualis)
         
+    # Check for export
+    export = request.args.get('export')
+    
+    if export == 'csv':
+        # Export all matching (without pagination)
+        all_journals = query.order_by(Journal.name).all()
+        
+        # Calculate emails for all filtered journals efficiently
+        from sqlalchemy import func
+        from database import Edition, Article, CapturedEmail
+        journal_ids = [j.id for j in all_journals]
+        
+        if journal_ids:
+            counts = session.query(
+                Journal.id,
+                func.count(CapturedEmail.id)
+            ).outerjoin(Edition, Edition.journal_id == Journal.id)\
+             .outerjoin(Article, Article.edition_id == Edition.id)\
+             .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
+             .filter(Journal.id.in_(journal_ids))\
+             .group_by(Journal.id).all()
+             
+            count_dict = dict(counts)
+            for j in all_journals:
+                j.email_count = count_dict.get(j.id, 0)
+        else:
+            for j in all_journals:
+                j.email_count = 0
+                
+        import io
+        import csv
+        from flask import make_response
+        si = io.StringIO()
+        cw = csv.writer(si)
+        cw.writerow(['ID', 'Nome', 'URL', 'Fonte', 'Status', 'Qualis', 'Área', 'ISSN Impresso', 'ISSN Eletrônico', 'E-mails Coletados'])
+        for j in all_journals:
+            status_text = 'Ativo' if j.active else 'Inativo'
+            cw.writerow([j.id, j.name, j.url, j.source_type, status_text, j.qualis, j.subject_area, j.issn_print, j.issn_electronic, j.email_count])
+        
+        output = make_response(si.getvalue())
+        output.headers["Content-Disposition"] = "attachment; filename=periodicos_exportados.csv"
+        output.headers["Content-type"] = "text/csv"
+        return output
+        
     filtered_records = query.count()
     journals = query.order_by(Journal.name).limit(per_page).offset((page - 1) * per_page).all()
     
