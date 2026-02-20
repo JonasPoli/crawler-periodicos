@@ -65,6 +65,7 @@
                         <th>ISSN / Impresso</th>
                         <th>Qualis</th>
                         <th>URL</th>
+                        <th class="text-center">E-mails</th>
                         <th>Status</th>
                         <th>Criado em</th>
                         <th>Ações</th>
@@ -81,6 +82,16 @@
                         </td>
                         <td><span class="badge bg-primary">{{ journal.qualis or '-' }}</span></td>
                         <td><a href="{{ journal.url }}" target="_blank">Link</a></td>
+                        <td class="text-center">
+                            {% if journal.email_count > 0 %}
+                            <a href="{{ url_for('report_emails_multi_journal', journal_ids=[journal.id]) }}"
+                                class="badge bg-info text-dark text-decoration-none" title="Ver e-mails">
+                                {{ journal.email_count }}
+                            </a>
+                            {% else %}
+                            <span class="text-muted">0</span>
+                            {% endif %}
+                        </td>
                         <td>
                             {% if journal.active %}
                             <span class="badge bg-success">Ativo</span>

@@ -257,12 +257,12 @@ class CapturedEmail(Base):
 
 
 def init_db():
-    engine = create_engine(DATABASE_URL)
+    engine = create_engine(DATABASE_URL, connect_args={'timeout': 30})
     Base.metadata.create_all(engine)
     return engine
 
 def get_session(engine=None):
     if engine is None:
-        engine = create_engine(DATABASE_URL)
+        engine = create_engine(DATABASE_URL, connect_args={'timeout': 30})
     Session = sessionmaker(bind=engine)
     return Session()

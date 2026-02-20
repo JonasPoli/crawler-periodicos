@@ -155,6 +155,27 @@ def list_journals():
     filtered_records = query.count()
     journals = query.order_by(Journal.name).limit(per_page).offset((page - 1) * per_page).all()
     
+    # Calculate emails amount
+    if journals:
+        from sqlalchemy import func
+        from database import Edition, Article, CapturedEmail
+        journal_ids = [j.id for j in journals]
+        counts = session.query(
+            Journal.id,
+            func.count(CapturedEmail.id)
+        ).outerjoin(Edition, Edition.journal_id == Journal.id)\
+         .outerjoin(Article, Article.edition_id == Edition.id)\
+         .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
+         .filter(Journal.id.in_(journal_ids))\
+         .group_by(Journal.id).all()
+         
+        count_dict = dict(counts)
+        for j in journals:
+            j.email_count = count_dict.get(j.id, 0)
+    else:
+        for j in journals:
+            j.email_count = 0
+    
     return render_template('list_journals.html', journals=journals, page=page, total=filtered_records, per_page=per_page,
                            total_records=total_records, filtered_records=filtered_records,
                            f_name=f_name, f_source=f_source, f_status=f_status, f_qualis=f_qualis)
