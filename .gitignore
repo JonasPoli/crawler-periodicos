@@ -23,8 +23,7 @@ downloads_ojs/
 downloads_scielo/
 
 # Generated Reports & Logs
-*.csv
-*.xlsx
+
 *.log
 *.jsonl
 *scraped.json
