@@ -1,0 +1,73 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Editar Arquivo</h2>
+    <a href="{{ url_for('list_files') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="file_type" class="form-label">Tipo</label>
+                <input type="text" class="form-control" id="file_type" name="file_type" value="{{ file.file_type }}"
+                    required>
+            </div>
+
+            <div class="mb-3">
+                <label for="local_path" class="form-label">Caminho Local</label>
+                <input type="text" class="form-control" id="local_path" name="local_path" value="{{ file.local_path }}">
+            </div>
+
+            <div class="mb-3">
+                <label for="url" class="form-label">
+                    URL Remota
+                    {% if file.url %}
+                    <a href="{{ file.url }}" target="_blank" class="ms-2" title="Abrir em nova aba">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                    {% endif %}
+                </label>
+                <input type="url" class="form-control" id="url" name="url" value="{{ file.url }}">
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
+        </form>
+    </div>
+</div>
+
+<!-- Emails (Indirectly related via Article) -->
+<h3 class="mb-3">E-mails (do Artigo associado)</h3>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <p class="text-muted">Estes e-mails estão associados ao Artigo deste arquivo.</p>
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>E-mail</th>
+                    <th>Status Verificação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for email in emails %}
+                <tr>
+                    <td>{{ email.id }}</td>
+                    <td>{{ email.email }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if email.verification_status == 'VALID' else 'secondary' }}">
+                            {{ email.verification_status }}
+                        </span>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3">Nenhum e-mail associado ao artigo.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

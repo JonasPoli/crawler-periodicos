@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Crawler Admin</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+    <style>
+        body {
+            padding-top: 20px;
+        }
+
+        .sidebar {
+            height: 100vh;
+            position: fixed;
+            top: 0;
+            left: 0;
+            padding-top: 20px;
+            background-color: #f8f9fa;
+            border-right: 1px solid #dee2e6;
+        }
+
+        .main-content {
+            margin-left: 260px;
+            padding: 20px;
+        }
+
+        .nav-link {
+            color: #333;
+        }
+
+        .nav-link.active {
+            font-weight: bold;
+            color: #0d6efd;
+        }
+
+        .nav-link:hover {
+            background-color: #e9ecef;
+        }
+    </style>
+</head>
+
+<body>
+
+    <div class="container-fluid">
+        <div class="row">
+            <nav class="col-md-3 col-lg-2 d-md-block sidebar collapse">
+                <div class="position-sticky">
+                    <h4 class="px-3 pb-3 border-bottom">Crawler Admin</h4>
+                    <ul class="nav flex-column">
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('dashboard') }}">
+                                <i class="fas fa-home me-2"></i> Dashboard
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('list_journals') }}">
+                                <i class="fas fa-book me-2"></i> Periódicos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('list_articles') }}">
+                                <i class="fas fa-file-alt me-2"></i> Artigos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('list_files') }}">
+                                <i class="fas fa-file me-2"></i> Arquivos
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#">
+                                <i class="fas fa-users me-2"></i> Autores
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="{{ url_for('list_emails') }}">
+                                <i class="fas fa-envelope me-2"></i> E-mails
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a class="nav-link" href="#" data-bs-toggle="collapse" data-bs-target="#reportsSubmenu">
+                                <i class="fas fa-chart-bar me-2"></i> Relatórios
+                            </a>
+                            <div class="collapse" id="reportsSubmenu">
+                                <ul class="nav flex-column ms-3">
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="{{ url_for('report_emails_by_journal') }}">E-mails por
+                                            Periódico</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="{{ url_for('report_emails_multi_journal') }}">E-mails (Múltiplos Periódicos)</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="{{ url_for('report_articles_by_journal') }}">Artigos
+                                            por Periódico</a>
+                                    </li>
+                                    <li class="nav-item">
+                                        <a class="nav-link" href="{{ url_for('report_emails_general') }}">E-mails
+                                            Geral</a>
+                                    </li>
+                                </ul>
+                            </div>
+                        </li>
+                    </ul>
+                </div>
+            </nav>
+
+            <main class="col-md-9 ms-sm-auto col-lg-10 px-md-4 main-content">
+                {% block content %}{% endblock %}
+            </main>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+
+</html>

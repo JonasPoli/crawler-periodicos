@@ -1,0 +1,140 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Editar E-mail</h2>
+    <a href="{{ url_for('list_emails') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="email" class="form-label">Endereço de E-mail</label>
+                <input type="email" class="form-control" id="email" name="email" value="{{ email.email }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="verification_status" class="form-label">Status Verificação</label>
+                <select class="form-select" id="verification_status" name="verification_status">
+                    <option value="PENDING" {{ 'selected' if email.verification_status=='PENDING' else '' }}>Pending
+                    </option>
+                    <option value="VALID" {{ 'selected' if email.verification_status=='VALID' else '' }}>Valid</option>
+                    <option value="INVALID" {{ 'selected' if email.verification_status=='INVALID' else '' }}>Invalid
+                    </option>
+                    <option value="UNKNOWN" {{ 'selected' if email.verification_status=='UNKNOWN' else '' }}>Unknown
+                    </option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
+        </form>
+    </div>
+</div>
+
+{% if email.article %}
+<!-- Article & Journal Info -->
+<div class="row">
+    <div class="col-md-6">
+        <h3 class="mb-3">Artigo Associado</h3>
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th style="width: 30%;">Título:</th>
+                        <td>
+                            {{ email.article.title }}
+                            {% if email.article.url %}
+                            <a href="{{ email.article.url }}" target="_blank" class="ms-1"><i
+                                    class="fas fa-external-link-alt"></i></a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>ID:</th>
+                        <td><a href="{{ url_for('edit_article', id=email.article.id) }}">{{ email.article.id }}</a></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6">
+        {% if email.article.edition and email.article.edition.journal %}
+        <h3 class="mb-3">Periódico</h3>
+        <div class="card shadow-sm mb-4">
+            <div class="card-body">
+                <table class="table table-borderless">
+                    <tr>
+                        <th style="width: 30%;">Nome:</th>
+                        <td>
+                            {{ email.article.edition.journal.name }}
+                            {% if email.article.edition.journal.url %}
+                            <a href="{{ email.article.edition.journal.url }}" target="_blank" class="ms-1"><i
+                                    class="fas fa-external-link-alt"></i></a>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    <tr>
+                        <th>Fonte:</th>
+                        <td>{{ email.article.edition.journal.source_type }}</td>
+                    </tr>
+                    <tr>
+                        <th>ID:</th>
+                        <td><a href="{{ url_for('edit_journal', id=email.article.edition.journal.id) }}">{{
+                                email.article.edition.journal.id }}</a></td>
+                    </tr>
+                </table>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Files -->
+<h3 class="mb-3">Arquivos do Artigo</h3>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Caminho</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in email.article.files %}
+                <tr>
+                    <td>{{ file.id }}</td>
+                    <td>{{ file.file_type }}</td>
+                    <td>
+                        {{ file.local_path }}
+                        {% if file.local_path %}
+                        <a href="{{ url_for('download_file', id=file.id) }}" class="ms-1" title="Download Local">
+                            <i class="fas fa-download"></i>
+                        </a>
+                        {% endif %}
+                        {% if file.url %}
+                        <a href="{{ file.url }}" target="_blank" class="ms-1" title="Abrir URL Remota">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('edit_file', id=file.id) }}" class="btn btn-sm btn-outline-primary"><i
+                                class="fas fa-edit"></i></a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">Nenhum arquivo associado a este artigo.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

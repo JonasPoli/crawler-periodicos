@@ -1,0 +1,112 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Artigos</h2>
+</div>
+
+<div class="mb-3">
+    <span class="badge bg-secondary me-2">Total: {{ total_records }}</span>
+    <span class="badge bg-info me-2">Filtrados: {{ filtered_records }}</span>
+    <span class="badge bg-primary">Na página: {{ articles|length }}</span>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-6">
+                <input type="text" class="form-control" name="title" placeholder="Título" value="{{ f_title or '' }}">
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" name="status">
+                    <option value="">Status (Todos)</option>
+                    <option value="found" {{ 'selected' if f_status=='found' else '' }}>Found</option>
+                    <option value="downloaded" {{ 'selected' if f_status=='downloaded' else '' }}>Downloaded</option>
+                    <option value="completed" {{ 'selected' if f_status=='completed' else '' }}>Completed</option>
+                    <option value="error" {{ 'selected' if f_status=='error' else '' }}>Error</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Periódico</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for art in articles %}
+                    <tr>
+                        <td>{{ art.id }}</td>
+                        <td>
+                            {{ art.title[:50] }}...
+                            {% if art.url %}
+                            <a href="{{ art.url }}" target="_blank" class="ms-1" title="Abrir Artigo">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+                        <td>{{ art.edition.journal.name if art.edition and art.edition.journal else '-' }}</td>
+                        <td>
+                            <span class="badge bg-{{ 'success' if art.status == 'completed' else 'warning' }}">{{
+                                art.status }}</span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('edit_article', id=art.id) }}" class="btn btn-sm btn-outline-primary"
+                                title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ url_for('delete_article', id=art.id) }}" class="btn btn-sm btn-outline-danger"
+                                title="Excluir" onclick="return confirm('Tem certeza?');">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total > per_page %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('list_articles', page=page-1, title=f_title, status=f_status) }}">Anterior</a>
+                </li>
+
+                {% set total_pages = (total / per_page)|round(0, 'ceil')|int %}
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page or (p >= page - 2 and p <= page + 2) or p==1 or p==total_pages %} <li
+                    class="page-item {{ 'active' if p == page else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('list_articles', page=p, title=f_title, status=f_status) }}">{{ p }}</a>
+                    </li>
+                    {% elif p == page - 3 or p == page + 3 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {{ 'disabled' if (page * per_page) >= total else '' }}">
+                        <a class="page-link"
+                            href="{{ url_for('list_articles', page=page+1, title=f_title, status=f_status) }}">Próxima</a>
+                    </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

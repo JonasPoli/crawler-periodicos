@@ -1,0 +1,104 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="mb-4">Relatório Geral de E-mails</h2>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <label for="journal_id" class="form-label">Periódico</label>
+                <select class="form-select" id="journal_id" name="journal_id">
+                    <option value="">Todos</option>
+                    {% for j in journals %}
+                    <option value="{{ j.id }}" {{ 'selected' if f_journal_id==j.id else '' }}>{{ j.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label for="domain" class="form-label">Domínio (ex: gmail.com)</label>
+                <input type="text" class="form-control" id="domain" name="domain" value="{{ f_domain or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label for="email_like" class="form-label">Contém (ex: silva)</label>
+                <input type="text" class="form-control" id="email_like" name="email_like"
+                    value="{{ f_email_like or '' }}">
+            </div>
+            <div class="col-md-3">
+                <label for="status" class="form-label">Status</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="">Todos</option>
+                    <option value="PENDING" {{ 'selected' if f_status=='PENDING' else '' }}>Pending</option>
+                    <option value="VALID" {{ 'selected' if f_status=='VALID' else '' }}>Valid</option>
+                    <option value="INVALID" {{ 'selected' if f_status=='INVALID' else '' }}>Invalid</option>
+                </select>
+            </div>
+            <div class="col-12 text-end">
+                <button type="submit" class="btn btn-primary">Filtrar</button>
+                <a href="{{ url_for('report_emails_general') }}" class="btn btn-outline-secondary">Limpar</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="d-flex justify-content-end mb-3">
+    <!-- Build export URL with current filters -->
+    <a href="{{ url_for('report_emails_general', journal_id=f_journal_id, domain=f_domain, email_like=f_email_like, status=f_status, export='csv') }}"
+        class="btn btn-success">
+        <i class="fas fa-file-csv"></i> Exportar CSV Filtro Atual
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Email</th>
+                        <th>Periódico</th>
+                        <th>Status</th>
+                        <th>Artigo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for email in emails %}
+                    <tr>
+                        <td><a href="{{ url_for('edit_email', id=email.id) }}">{{ email.id }}</a></td>
+                        <td>{{ email.email }}</td>
+                        <td><a href="{{ url_for('edit_journal', id=email.article.edition.journal.id) }}">{{
+                                email.article.edition.journal.name[:30] }}...</a></td>
+                        <td>
+                            <span
+                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else 'secondary' }}">
+                                {{ email.verification_status }}
+                            </span>
+                        </td>
+                        <td><a href="{{ url_for('edit_article', id=email.article.id) }}">{{ email.article.title[:30]
+                                }}...</a></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('report_emails_general', page=page-1, journal_id=f_journal_id, domain=f_domain, email_like=f_email_like, status=f_status) }}">Anterior</a>
+                </li>
+                <li class="page-item disabled">
+                    <span class="page-link">Página {{ page }}</span>
+                </li>
+                <li class="page-item {{ 'disabled' if (page * per_page) >= total else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('report_emails_general', page=page+1, journal_id=f_journal_id, domain=f_domain, email_like=f_email_like, status=f_status) }}">Próxima</a>
+                </li>
+            </ul>
+        </nav>
+    </div>
+</div>
+{% endblock %}

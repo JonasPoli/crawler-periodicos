@@ -1,0 +1,83 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="mb-4">Relatório: E-mails por Periódico</h2>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-6">
+                <label for="journal_id" class="form-label">Periódico</label>
+                <select class="form-select" id="journal_id" name="journal_id" onchange="this.form.submit()">
+                    <option value="">Selecione um periódico...</option>
+                    {% for j in journals %}
+                    <option value="{{ j.id }}" {{ 'selected' if selected_journal_id==j.id else '' }}>{{ j.name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label for="status" class="form-label">Status</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="">Todos</option>
+                    <option value="PENDING" {{ 'selected' if selected_status=='PENDING' else '' }}>Pending</option>
+                    <option value="VALID" {{ 'selected' if selected_status=='VALID' else '' }}>Valid</option>
+                    <option value="INVALID" {{ 'selected' if selected_status=='INVALID' else '' }}>Invalid</option>
+                </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+{% if selected_journal_id %}
+<div class="d-flex justify-content-end mb-3">
+    <a href="{{ url_for('report_emails_by_journal', journal_id=selected_journal_id, status=selected_status, export='csv') }}"
+        class="btn btn-success">
+        <i class="fas fa-file-csv"></i> Exportar CSV
+    </a>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Artigo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for email in emails %}
+                    <tr>
+                        <td><a href="{{ url_for('edit_email', id=email.id) }}">{{ email.id }}</a></td>
+                        <td>{{ email.email }}</td>
+                        <td>
+                            <span
+                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else 'secondary' }}">
+                                {{ email.verification_status }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('edit_article', id=email.article.id) }}">
+                                {{ email.article.title[:50] }}...
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4">Nenhum e-mail encontrado para este filtro.</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

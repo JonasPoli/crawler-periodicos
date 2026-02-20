@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Modern Dashboard Styling */
+    .dashboard-header {
+        margin-bottom: 2rem;
+        color: #2c3e50;
+        font-weight: 700;
+        letter-spacing: -0.5px;
+    }
+
+    .metric-card {
+        border: none;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        transition: transform 0.2s ease, box-shadow 0.2s ease;
+        background: #fff;
+        overflow: hidden;
+    }
+
+    .metric-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+    }
+
+    /* Phase colors */
+    .border-crawling {
+        border-top: 4px solid #3498db;
+    }
+
+    .bg-crawling {
+        background-color: #f0f7fb;
+        color: #2980b9;
+    }
+
+    .text-crawling {
+        color: #3498db;
+    }
+
+    .progress-crawling {
+        background-color: #3498db;
+    }
+
+    .border-processing {
+        border-top: 4px solid #9b59b6;
+    }
+
+    .bg-processing {
+        background-color: #f6f0fb;
+        color: #8e44ad;
+    }
+
+    .text-processing {
+        color: #9b59b6;
+    }
+
+    .progress-processing {
+        background-color: #9b59b6;
+    }
+
+    .border-verification {
+        border-top: 4px solid #e67e22;
+    }
+
+    .bg-verification {
+        background-color: #fdf3e8;
+        color: #d35400;
+    }
+
+    .text-verification {
+        color: #e67e22;
+    }
+
+    .progress-verification {
+        background-color: #e67e22;
+    }
+
+    .metric-card .card-header {
+        border-bottom: none;
+        font-weight: 600;
+        text-transform: uppercase;
+        font-size: 0.85rem;
+        letter-spacing: 0.5px;
+        padding: 1rem 1.25rem;
+    }
+
+    .metric-card .card-body {
+        padding: 1.5rem 1.25rem;
+    }
+
+    .metric-main-val {
+        font-size: 3rem;
+        font-weight: 800;
+        line-height: 1;
+        margin-bottom: 0.25rem;
+        color: #34495e;
+    }
+
+    .metric-label {
+        font-size: 0.9rem;
+        color: #7f8c8d;
+        font-weight: 500;
+    }
+
+    .progress {
+        height: 10px;
+        border-radius: 10px;
+        margin-top: 1.5rem;
+        margin-bottom: 0.5rem;
+        background-color: #ecf0f1;
+    }
+
+    .stats-row {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.85rem;
+        color: #555;
+        margin-top: 0.5rem;
+    }
+
+    .stats-box {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 10px;
+        margin-top: 1rem;
+        text-align: center;
+    }
+
+    .stats-box .val {
+        font-weight: 700;
+        font-size: 1.1rem;
+        color: #2c3e50;
+    }
+
+    .stats-box .lbl {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #95a5a6;
+        letter-spacing: 0.5px;
+    }
+</style>
+
+<div class="d-flex justify-content-between align-items-center dashboard-header">
+    <h2 class="mb-0"><i class="fas fa-chart-pie me-2"></i> Dashboard Geral</h2>
+    <div>
+        <span class="badge bg-secondary p-2"><i class="fas fa-book me-1"></i> Periódicos: <strong>{{ total_journals
+                }}</strong> ({{ active_journals }} ativos)</span>
+    </div>
+</div>
+
+<div class="row g-4">
+
+    <!-- PHASE 1: CRAWLING -->
+    <div class="col-lg-4 col-md-6">
+        <div class="card metric-card border-crawling h-100">
+            <div class="card-header bg-crawling">
+                <i class="fas fa-spider me-2"></i> Fase 1: Crawling (Edições)
+            </div>
+            <div class="card-body">
+                <div class="text-center">
+                    <div class="metric-main-val">{{ total_editions }}</div>
+                    <div class="metric-label">Edições Mapeadas</div>
+                </div>
+
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated progress-crawling"
+                        role="progressbar" style="width: {{ editions_pct }}%" aria-valuenow="{{ editions_pct }}"
+                        aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+
+                <div class="stats-row fw-bold">
+                    <span class="text-success"><i class="fas fa-check-circle"></i> {{ completed_editions }} conc.</span>
+                    <span class="text-crawling">{{ editions_pct }}%</span>
+                </div>
+
+                <div class="row gx-2 mt-3">
+                    <div class="col-6">
+                        <div class="stats-box">
+                            <div class="val">{{ editions_speed }} / min</div>
+                            <div class="lbl">Velocidade</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stats-box">
+                            <div class="val">{{ editions_time_remaining }}</div>
+                            <div class="lbl">Tempo Restante</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- PHASE 2: PROCESSING -->
+    <div class="col-lg-4 col-md-6">
+        <div class="card metric-card border-processing h-100">
+            <div class="card-header bg-processing">
+                <i class="fas fa-cogs me-2"></i> Fase 2: Processamento (PDFs)
+            </div>
+            <div class="card-body">
+                <div class="text-center">
+                    <div class="metric-main-val">{{ total_articles }}</div>
+                    <div class="metric-label">Artigos Encontrados</div>
+                </div>
+
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated progress-processing"
+                        role="progressbar" style="width: {{ articles_pct }}%" aria-valuenow="{{ articles_pct }}"
+                        aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+
+                <div class="stats-row fw-bold">
+                    <span class="text-success"><i class="fas fa-check-circle"></i> {{ completed_articles }} conc.</span>
+                    <span class="text-processing">{{ articles_pct }}%</span>
+                </div>
+
+                <div class="row gx-2 mt-3">
+                    <div class="col-6">
+                        <div class="stats-box">
+                            <div class="val">{{ articles_speed }} / min</div>
+                            <div class="lbl">Velocidade</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stats-box">
+                            <div class="val">{{ articles_time_remaining }}</div>
+                            <div class="lbl">Tempo Restante</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+    <!-- PHASE 3: VERIFICATION -->
+    <div class="col-lg-4 col-md-6">
+        <div class="card metric-card border-verification h-100">
+            <div class="card-header bg-verification">
+                <i class="fas fa-envelope-open-text me-2"></i> Fase 3: Verificação (E-mails)
+            </div>
+            <div class="card-body">
+                <div class="text-center">
+                    <div class="metric-main-val">{{ total_emails }}</div>
+                    <div class="metric-label">E-mails Capturados</div>
+                </div>
+
+                <div class="progress">
+                    <div class="progress-bar progress-bar-striped progress-bar-animated progress-verification"
+                        role="progressbar" style="width: {{ emails_pct }}%" aria-valuenow="{{ emails_pct }}"
+                        aria-valuemin="0" aria-valuemax="100"></div>
+                </div>
+
+                <div class="stats-row fw-bold">
+                    <span class="text-success"><i class="fas fa-check-circle"></i> {{ valid_emails }} válidos</span>
+                    <span class="text-verification">{{ emails_pct }}%</span>
+                </div>
+
+                <div class="row gx-2 mt-3">
+                    <div class="col-6">
+                        <div class="stats-box">
+                            <div class="val">{{ emails_speed }} / min</div>
+                            <div class="lbl">Velocidade</div>
+                        </div>
+                    </div>
+                    <div class="col-6">
+                        <div class="stats-box">
+                            <div class="val">{{ emails_time_remaining }}</div>
+                            <div class="lbl">Tempo Restante</div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </div>
+
+</div>
+{% endblock %}

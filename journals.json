@@ -1,0 +1,527 @@
+[
+    {
+        "name": "REVISTA DE ADMINISTRAÇÃO PÚBLICA",
+        "url": "https://www.scielo.br/j/rap",
+        "type": "scielo"
+    },
+    {
+        "name": "REVISTA DE EDUCACIÓN",
+        "url": "http://recyt.fecyt.es/index.php/Redu",
+        "type": "ojs"
+    },
+    {
+        "name": "PERSPECTIVA (FLORIANÓPOLIS)",
+        "url": "https://periodicos.ufsc.br/index.php/perspectiva",
+        "type": "ojs"
+    },
+    {
+        "name": "EDUCAÇÃO E FILOSOFIA",
+        "url": "https://periodicos.ufu.br/educacaoefilosofia",
+        "type": "ojs"
+    },
+    {
+        "name": "PSICOLOGIA E SOCIEDADE",
+        "url": "https://www.scielo.br/j/psoc",
+        "type": "scielo"
+    },
+    {
+        "name": "CONTEXTO & EDUCAÇÃO",
+        "url": "https://www.revistas.unijui.edu.br/index.php/contextoeducacao",
+        "type": "ojs"
+    },
+    {
+        "name": "NOVA ECONOMIA",
+        "url": "https://www.scielo.br/j/neco",
+        "type": "scielo"
+    },
+    {
+        "name": "REVISTA USP",
+        "url": "https://www.revistas.usp.br/revusp",
+        "type": "ojs"
+    },
+    {
+        "name": "INFORMAÇÃO & SOCIEDADE: ESTUDOS",
+        "url": "https://periodicos.ufpb.br/index.php/ies",
+        "type": "ojs"
+    },
+    {
+        "name": "ECONOMIA E SOCIEDADE",
+        "url": "https://www.scielo.br/j/ecos",
+        "type": "scielo"
+    },
+    {
+        "name": "AMBIENTE & SOCIEDADE",
+        "url": "https://www.scielo.br/j/asoc",
+        "type": "scielo"
+    },
+    {
+        "name": "ANUÁRIO ANTROPOLÓGICO",
+        "url": "https://www.scielo.br/j/aantropol/",
+        "type": "scielo"
+    },
+    {
+        "name": "CONTEXTO & EDUCAÇÃO",
+        "url": "https://www.scielo.br/j/cedu/",
+        "type": "scielo"
+    },
+    {
+        "name": "INFORMAÇÃO & SOCIEDADE: ESTUDOS",
+        "url": "https://www.scielo.br/j/ise/",
+        "type": "scielo"
+    },
+    {
+        "name": "EM ABERTO",
+        "url": "https://www.scielo.br/j/ea/",
+        "type": "scielo"
+    },
+    {
+        "name": "ORGANIZAÇÕES & SOCIEDADE",
+        "url": "https://www.scielo.br/j/os/",
+        "type": "scielo"
+    },
+    {
+        "name": "ANTHROPOLOGICAL THEORY",
+        "url": "https://www.scielo.br/j/anttheo/",
+        "type": "scielo"
+    },
+    {
+        "name": "REVISTA DE DIREITO DA CIDADE",
+        "url": "https://www.scielo.br/j/rdc/",
+        "type": "scielo"
+    },
+    {
+        "name": "REVISTA DE ECONOMIA CONTEMPORÂNEA",
+        "url": "https://www.scielo.br/j/rec/",
+        "type": "scielo"
+    },
+    {
+        "name": "REVISTA BRASILEIRA DE HISTÓRIA & CIÊNCIAS SOCIAIS",
+        "url": "https://www.scielo.br/j/rbcsoc/",
+        "type": "scielo"
+    },
+    {
+        "name": "ILHA - REVISTA DE ANTROPOLOGIA",
+        "url": "https://www.scielo.br/j/ra/",
+        "type": "scielo"
+    },
+    {
+        "name": "CADERNOS DE EDUCAÇÃO -UFPEL (ONLINE)",
+        "url": "https://www.scielo.br/j/ce/",
+        "type": "scielo"
+    },
+    {
+        "name": "ANTROPOLÍTICA: REVISTA CONTEMPORÂNEA DE ANTROPOLOGIA",
+        "url": "https://www.scielo.br/j/antropol/",
+        "type": "scielo"
+    },
+    {
+        "name": "SOCIOLOGIA & ANTROPOLOGIA",
+        "url": "https://www.scielo.br/j/sant/",
+        "type": "scielo"
+    },
+    {
+        "name": "LINHAS CRÍTICAS",
+        "url": "http://seer.bce.unb.br/index.php/linhascriticas",
+        "type": "ojs"
+    },
+    {
+        "name": "REVISTA IBEROAMERICANA DE EDUCACIÓN",
+        "url": "https://rieoei.org/RIE",
+        "type": "ojs"
+    },
+    {
+        "name": "EM ABERTO",
+        "url": "https://emaberto.inep.gov.br/ojs3/index.php/emaberto",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista DCS",
+        "url": "https://ojs.revistadcs.com/index.php/revista/index",
+        "type": "ojs"
+    },
+    {
+        "name": "Cadernos Pedagógicos",
+        "url": "https://ojs.studiespublicacoes.com.br/ojs/index.php/cadped",
+        "type": "ojs"
+    },
+    {
+        "name": "Cuadernos de Educación",
+        "url": "https://ojs.cuadernoseducacion.com/ojs/index.php/ced",
+        "type": "ojs"
+    },
+    {
+        "name": "Cadernos Cajuína",
+        "url": "https://v3.cadernoscajuina.pro.br/index.php/revista",
+        "type": "ojs"
+    },
+    {
+        "name": "Home",
+        "url": "https://ojs.revistacontemporanea.com/ojs/index.php/home",
+        "type": "ojs"
+    },
+    {
+        "name": "80",
+        "url": "https://ojs.revistagesec.org.br/secretariado/issue/view/80",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista",
+        "url": "https://revista.ioles.com.br/boca/index.php/revista",
+        "type": "ojs"
+    },
+    {
+        "name": "Multidisciplinar",
+        "url": "https://remunom.ojsbr.com/multidisciplinar",
+        "type": "ojs"
+    },
+    {
+        "name": "Artefactum",
+        "url": "https://www.artefactumjournal.com/index.php/artefactum",
+        "type": "ojs"
+    },
+    {
+        "name": "Arace",
+        "url": "https://periodicos.newsciencepubl.com/arace",
+        "type": "ojs"
+    },
+    {
+        "name": "Olel",
+        "url": "https://ojs.observatoriolatinoamericano.com/ojs/index.php/olel",
+        "type": "ojs"
+    },
+    {
+        "name": "Archive",
+        "url": "https://rgsa.openaccesspublications.org/rgsa/issue/archive",
+        "type": "ojs"
+    },
+    {
+        "name": "Clcs",
+        "url": "https://ojs.revistacontribuciones.com/ojs/index.php/clcs",
+        "type": "ojs"
+    },
+    {
+        "name": "Delos",
+        "url": "https://ojs.revistadelos.com/ojs/index.php/delos",
+        "type": "ojs"
+    },
+    {
+        "name": "JAFF - Jornal de Assistência Farmacêutica e Farmacoeconomia",
+        "url": "https://ojs.jaff.org.br/ojs/index.php/jaff",
+        "type": "ojs"
+    },
+    {
+        "name": "Periódicos UNESC",
+        "url": "https://periodicos.unesc.net/ojs/index.php",
+        "type": "ojs"
+    },
+    {
+        "name": "Europub Journal of Health Research",
+        "url": "https://europubpublications.com/ojs/index.php/ejhr/about",
+        "type": "ojs"
+    },
+    {
+        "name": "Brazilian Applied Science Review",
+        "url": "https://brazilianjournals.com/ojs/index.php/BASR",
+        "type": "ojs"
+    },
+    {
+        "name": "Sociedade de Arqueologia Brasileira",
+        "url": "https://revista.sabnet.org/ojs/index.php/sab",
+        "type": "ojs"
+    },
+    {
+        "name": "Centro Universitário Fundação Santo André",
+        "url": "https://revistafundacao.fsa.br/ojs/index.php/rfa",
+        "type": "ojs"
+    },
+    {
+        "name": "FAM - Faculdade de Americana",
+        "url": "https://faculdadedeamericana.com.br/ojs",
+        "type": "ojs"
+    },
+    {
+        "name": "Studies in Engineering amd Exact Sciences",
+        "url": "https://studiespublicacoes.com.br/ojs/index.php/sees",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista Contemporânea",
+        "url": "https://revistacontemporanea.com/ojs/index.php/home",
+        "type": "ojs"
+    },
+    {
+        "name": "South Florida Journal of Environmental and Animal Science",
+        "url": "https://southfloridapublishing.com/ojs/index.php/sfjeas",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista Campo da História",
+        "url": "https://campodahistoria.com.br/ojs/index.php/rcdh",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista Azeites & Olivais",
+        "url": "https://cientifica.azeiteseolivais.com.br/ojs/index.php/rao",
+        "type": "ojs"
+    },
+    {
+        "name": "Studies in Social Sciences Review",
+        "url": "https://studiespublicacoes.com.br/ojs/index.php/sssr",
+        "type": "ojs"
+    },
+    {
+        "name": "Brazilian Journal of Animal and Environmental Research",
+        "url": "https://brazilianjournals.com/ojs/index.php/BJAER",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista Gestão e Conhecimento",
+        "url": "https://revistagc.com.br/ojs/index.php/rgc",
+        "type": "ojs"
+    },
+    {
+        "name": "Europub Journal of Social Sciences Research",
+        "url": "https://europubpublications.com/ojs/index.php/ejssr",
+        "type": "ojs"
+    },
+    {
+        "name": "International Journal of Management Affairs",
+        "url": "https://mr-society.com/ojs/index.php/jma",
+        "type": "ojs"
+    },
+    {
+        "name": "Latin American Journal of Development",
+        "url": "https://latinamericanpublicacoes.com.br/ojs/index.php/jdev",
+        "type": "ojs"
+    },
+    {
+        "name": "Studies in Multidisciplinary Reviews",
+        "url": "https://studiespublicacoes.com.br/ojs/index.php/smr",
+        "type": "ojs"
+    },
+    {
+        "name": "South Florida Journal of Development",
+        "url": "https://southfloridapublishing.com/ojs/index.php/jdev",
+        "type": "ojs"
+    },
+    {
+        "name": "Journal of Medical Affairs",
+        "url": "https://mr-society.com/ojs/index.php/jhra",
+        "type": "ojs"
+    },
+    {
+        "name": "Brazilian Journal of Health Review",
+        "url": "https://brazilianjournals.com/ojs/index.php/BJHR",
+        "type": "ojs"
+    },
+    {
+        "name": "Multidisciplinary Science Journal",
+        "url": "https://malque.pub/ojs/index.php/msj",
+        "type": "ojs"
+    },
+    {
+        "name": "Brazilian Journal of Technology",
+        "url": "https://brazilianjournals.com/ojs/index.php/BJT",
+        "type": "ojs"
+    },
+    {
+        "name": "Studies in Education Sciences",
+        "url": "https://studiespublicacoes.com.br/ojs/index.php/ses",
+        "type": "ojs"
+    },
+    {
+        "name": "South Florida Journal of Health",
+        "url": "https://southfloridapublishing.com/ojs/index.php/jhea",
+        "type": "ojs"
+    },
+    {
+        "name": "Europub Journal of Animal and Environmental Research",
+        "url": "https://europubpublications.com/ojs/index.php/ejaer",
+        "type": "ojs"
+    },
+    {
+        "name": "JICS - Sociedade Brasileira de Computação",
+        "url": "https://jics.org.br/ojs/index.php/JICS",
+        "type": "ojs"
+    },
+    {
+        "name": "Applied Veterinary Research",
+        "url": "https://malque.pub/ojs/index.php/avr",
+        "type": "ojs"
+    },
+    {
+        "name": "Brazilian Journal of Business",
+        "url": "https://brazilianjournals.com/ojs/index.php/BJB",
+        "type": "ojs"
+    },
+    {
+        "name": "Europub Journal of Exact and Engineering Research",
+        "url": "https://europubpublications.com/ojs/index.php/ejeer",
+        "type": "ojs"
+    },
+    {
+        "name": "Journal of Animal Behaviour and Biometeorology",
+        "url": "https://malque.pub/ojs/index.php/jabb",
+        "type": "ojs"
+    },
+    {
+        "name": "MALQUE Publishing",
+        "url": "https://malque.pub/ojs",
+        "type": "ojs"
+    },
+    {
+        "name": "Research in Alternative Animal Feeds",
+        "url": "https://malque.pub/ojs/index.php/raaf",
+        "type": "ojs"
+    },
+    {
+        "name": "Studies in Health Sciences",
+        "url": "https://studiespublicacoes.com.br/ojs/index.php/shs",
+        "type": "ojs"
+    },
+    {
+        "name": "Europub Journal of Education Research",
+        "url": "https://europubpublications.com/ojs/index.php/ejer",
+        "type": "ojs"
+    },
+    {
+        "name": "Studies in Environmental and Animal Sciences",
+        "url": "https://studiespublicacoes.com.br/ojs/index.php/seas",
+        "type": "ojs"
+    },
+    {
+        "name": "Brazilian Journal of Development",
+        "url": "https://brazilianjournals.com/ojs/index.php/BRJD",
+        "type": "ojs"
+    },
+    {
+        "name": "Journal of Archives of Health",
+        "url": "https://latinamericanpublicacoes.com.br/ojs/index.php/ah",
+        "type": "ojs"
+    },
+    {
+        "name": "Multidisciplinary Reviews",
+        "url": "https://malque.pub/ojs/index.php/mr",
+        "type": "ojs"
+    },
+    {
+        "name": "Revista Internacional de Vitimologia e Justiça Restaurativa",
+        "url": "https://revista.provitima.org/ojs/index.php/rpv",
+        "type": "ojs"
+    },
+    {
+        "name": "RSP",
+        "url": "https://www.scielo.br/j/rsp",
+        "type": "scielo"
+    },
+    {
+        "name": "POPE",
+        "url": "https://www.scielo.br/j/pope",
+        "type": "scielo"
+    },
+    {
+        "name": "RESS",
+        "url": "https://www.scielo.br/j/ress",
+        "type": "scielo"
+    },
+    {
+        "name": "CSC",
+        "url": "https://www.scielo.br/j/csc",
+        "type": "scielo"
+    },
+    {
+        "name": "PHYSIS",
+        "url": "https://www.scielo.br/j/physis",
+        "type": "scielo"
+    },
+    {
+        "name": "ICSE",
+        "url": "https://www.scielo.br/j/icse",
+        "type": "scielo"
+    },
+    {
+        "name": "RBEPID",
+        "url": "https://www.scielo.br/j/rbepid",
+        "type": "scielo"
+    },
+    {
+        "name": "CADSC",
+        "url": "https://www.scielo.br/j/cadsc",
+        "type": "scielo"
+    },
+    {
+        "name": "REBEN",
+        "url": "https://www.scielo.br/j/reben",
+        "type": "scielo"
+    },
+    {
+        "name": "REEUSP",
+        "url": "https://www.scielo.br/j/reeusp",
+        "type": "scielo"
+    },
+    {
+        "name": "TCE",
+        "url": "https://www.scielo.br/j/tce",
+        "type": "scielo"
+    },
+    {
+        "name": "RLAE",
+        "url": "https://www.scielo.br/j/rlae",
+        "type": "scielo"
+    },
+    {
+        "name": "APE",
+        "url": "https://www.scielo.br/j/ape",
+        "type": "scielo"
+    },
+    {
+        "name": "EAN",
+        "url": "https://www.scielo.br/j/ean",
+        "type": "scielo"
+    },
+    {
+        "name": "REME",
+        "url": "https://www.scielo.br/j/reme",
+        "type": "scielo"
+    },
+    {
+        "name": "REF",
+        "url": "https://www.scielo.br/j/ref",
+        "type": "scielo"
+    },
+    {
+        "name": "RGENF",
+        "url": "https://www.scielo.br/j/rgenf",
+        "type": "scielo"
+    },
+    {
+        "name": "REE",
+        "url": "https://www.scielo.br/j/ree",
+        "type": "scielo"
+    },
+    {
+        "name": "COGGIT",
+        "url": "https://www.scielo.br/j/coggit",
+        "type": "scielo"
+    },
+    {
+        "name": "RBFAR",
+        "url": "https://www.scielo.br/j/rbfar",
+        "type": "scielo"
+    },
+    {
+        "name": "JBCHS",
+        "url": "https://www.scielo.br/j/jbchs",
+        "type": "scielo"
+    },
+    {
+        "name": "QN",
+        "url": "https://www.scielo.br/j/qn",
+        "type": "scielo"
+    },
+    {
+        "name": "JBCS",
+        "url": "https://www.scielo.br/j/jbcs",
+        "type": "scielo"
+    }
+]

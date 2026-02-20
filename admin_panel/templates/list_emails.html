@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>E-mails Capturados</h2>
+</div>
+
+<div class="mb-3">
+    <span class="badge bg-secondary me-2">Total: {{ total_records }}</span>
+    <span class="badge bg-info me-2">Filtrados: {{ filtered_records }}</span>
+    <span class="badge bg-primary">Na página: {{ emails|length }}</span>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-6">
+                <input type="text" class="form-control" name="email" placeholder="E-mail" value="{{ f_email or '' }}">
+            </div>
+            <div class="col-md-4">
+                <select class="form-select" name="status">
+                    <option value="">Status (Todos)</option>
+                    <option value="PENDING" {{ 'selected' if f_status=='PENDING' else '' }}>Pending</option>
+                    <option value="VALID" {{ 'selected' if f_status=='VALID' else '' }}>Valid</option>
+                    <option value="INVALID" {{ 'selected' if f_status=='INVALID' else '' }}>Invalid</option>
+                    <option value="UNKNOWN" {{ 'selected' if f_status=='UNKNOWN' else '' }}>Unknown</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>E-mail</th>
+                        <th>Artigo</th>
+                        <th>Verificação</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for email in emails %}
+                    <tr>
+                        <td>{{ email.id }}</td>
+                        <td>{{ email.email }}</td>
+                        <td>
+                            {% if email.article %}
+                            <a href="{{ url_for('edit_article', id=email.article.id) }}">
+                                {{ email.article.title[:30] }}...
+                            </a>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span
+                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else 'secondary' }}">
+                                {{ email.verification_status }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('edit_email', id=email.id) }}" class="btn btn-sm btn-outline-primary"
+                                title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ url_for('delete_email', id=email.id) }}" class="btn btn-sm btn-outline-danger"
+                                title="Excluir" onclick="return confirm('Tem certeza?');">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total > per_page %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('list_emails', page=page-1, email=f_email, status=f_status) }}">Anterior</a>
+                </li>
+
+                {% set total_pages = (total / per_page)|round(0, 'ceil')|int %}
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page or (p >= page - 2 and p <= page + 2) or p==1 or p==total_pages %} <li
+                    class="page-item {{ 'active' if p == page else '' }}">
+                    <a class="page-link" href="{{ url_for('list_emails', page=p, email=f_email, status=f_status) }}">{{
+                        p }}</a>
+                    </li>
+                    {% elif p == page - 3 or p == page + 3 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {{ 'disabled' if (page * per_page) >= total else '' }}">
+                        <a class="page-link"
+                            href="{{ url_for('list_emails', page=page+1, email=f_email, status=f_status) }}">Próxima</a>
+                    </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

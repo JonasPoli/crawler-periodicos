@@ -1,0 +1,141 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Periódicos</h2>
+    <a href="{{ url_for('create_journal') }}" class="btn btn-primary"><i class="fas fa-plus"></i> Novo Periódico</a>
+</div>
+
+<div class="mb-3">
+    <span class="badge bg-secondary me-2">Total: {{ total_records }}</span>
+    <span class="badge bg-info me-2">Filtrados: {{ filtered_records }}</span>
+    <span class="badge bg-primary">Na página: {{ journals|length }}</span>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control" name="name" placeholder="Nome" value="{{ f_name or '' }}">
+            </div>
+            <div class="col-md-3">
+                <select class="form-select" name="source">
+                    <option value="">Fonte (Todos)</option>
+                    <option value="ojs" {{ 'selected' if f_source=='ojs' else '' }}>OJS</option>
+                    <option value="scielo" {{ 'selected' if f_source=='scielo' else '' }}>SciELO</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" name="qualis">
+                    <option value="">Qualis (Todos)</option>
+                    <option value="A1" {{ 'selected' if f_qualis=='A1' else '' }}>A1</option>
+                    <option value="A2" {{ 'selected' if f_qualis=='A2' else '' }}>A2</option>
+                    <option value="A3" {{ 'selected' if f_qualis=='A3' else '' }}>A3</option>
+                    <option value="A4" {{ 'selected' if f_qualis=='A4' else '' }}>A4</option>
+                    <option value="B1" {{ 'selected' if f_qualis=='B1' else '' }}>B1</option>
+                    <option value="B2" {{ 'selected' if f_qualis=='B2' else '' }}>B2</option>
+                    <option value="B3" {{ 'selected' if f_qualis=='B3' else '' }}>B3</option>
+                    <option value="B4" {{ 'selected' if f_qualis=='B4' else '' }}>B4</option>
+                    <option value="C" {{ 'selected' if f_qualis=='C' else '' }}>C</option>
+                    <option value="NONE" {{ 'selected' if f_qualis=='NONE' else '' }}>Sem Qualis</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <select class="form-select" name="status">
+                    <option value="">Status (Todos)</option>
+                    <option value="active" {{ 'selected' if f_status=='active' else '' }}>Ativo</option>
+                    <option value="inactive" {{ 'selected' if f_status=='inactive' else '' }}>Inativo</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Nome</th>
+                        <th>ISSN / Impresso</th>
+                        <th>Qualis</th>
+                        <th>URL</th>
+                        <th>Status</th>
+                        <th>Criado em</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for journal in journals %}
+                    <tr>
+                        <td>{{ journal.id }}</td>
+                        <td>{{ journal.name }}</td>
+                        <td>
+                            <span class="d-block">{{ journal.issn or journal.issn_electronic or '-' }}</span>
+                            <small class="text-muted">{{ journal.issn_print or '-' }}</small>
+                        </td>
+                        <td><span class="badge bg-primary">{{ journal.qualis or '-' }}</span></td>
+                        <td><a href="{{ journal.url }}" target="_blank">Link</a></td>
+                        <td>
+                            {% if journal.active %}
+                            <span class="badge bg-success">Ativo</span>
+                            {% else %}
+                            <span class="badge bg-secondary">Inativo</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ journal.created_at.strftime('%Y-%m-%d') if journal.created_at else '-' }}</td>
+                        <td>
+                            <a href="{{ url_for('edit_journal', id=journal.id) }}"
+                                class="btn btn-sm btn-outline-primary" title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ url_for('delete_journal', id=journal.id) }}"
+                                class="btn btn-sm btn-outline-danger" title="Excluir"
+                                onclick="return confirm('Tem certeza?');">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total > per_page %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('list_journals', page=page-1, name=f_name, source=f_source, status=f_status, qualis=f_qualis) }}">Anterior</a>
+                </li>
+
+                {# Simple logic for page numbers: show current-2 to current+2 #}
+                {% set total_pages = (total / per_page)|round(0, 'ceil')|int %}
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page or (p >= page - 2 and p <= page + 2) or p==1 or p==total_pages %} <li
+                    class="page-item {{ 'active' if p == page else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('list_journals', page=p, name=f_name, source=f_source, status=f_status, qualis=f_qualis) }}">{{
+                        p }}</a>
+                    </li>
+                    {% elif p == page - 3 or p == page + 3 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {{ 'disabled' if (page * per_page) >= total else '' }}">
+                        <a class="page-link"
+                            href="{{ url_for('list_journals', page=page+1, name=f_name, source=f_source, status=f_status, qualis=f_qualis) }}">Próxima</a>
+                    </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>{{ 'Editar' if journal else 'Novo' }} Periódico</h2>
+    <a href="{{ url_for('list_journals') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="name" class="form-label">Nome *</label>
+                <input type="text" class="form-control" id="name" name="name"
+                    value="{{ journal.name if journal else '' }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="url" class="form-label">URL *</label>
+                <input type="url" class="form-control" id="url" name="url" value="{{ journal.url if journal else '' }}"
+                    required>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="acronym" class="form-label">Acrônimo</label>
+                    <input type="text" class="form-control" id="acronym" name="acronym"
+                        value="{{ journal.acronym if journal else '' }}">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="issn" class="form-label">ISSN (Geral)</label>
+                    <input type="text" class="form-control" id="issn" name="issn"
+                        value="{{ journal.issn if journal else '' }}">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="source_type" class="form-label">Tipo de Fonte</label>
+                    <select class="form-select" id="source_type" name="source_type">
+                        <option value="ojs" {{ 'selected' if journal and journal.source_type=='ojs' else '' }}>OJS
+                        </option>
+                        <option value="scielo" {{ 'selected' if journal and journal.source_type=='scielo' else '' }}>
+                            SciELO</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="issn_print" class="form-label">ISSN Impresso</label>
+                    <input type="text" class="form-control" id="issn_print" name="issn_print"
+                        value="{{ journal.issn_print or '' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="issn_electronic" class="form-label">ISSN Eletrônico</label>
+                    <input type="text" class="form-control" id="issn_electronic" name="issn_electronic"
+                        value="{{ journal.issn_electronic or '' }}">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="qualis" class="form-label">Qualis</label>
+                    <input type="text" class="form-control" id="qualis" name="qualis"
+                        value="{{ journal.qualis or '' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="subject_area" class="form-label">Área</label>
+                    <input type="text" class="form-control" id="subject_area" name="subject_area"
+                        value="{{ journal.subject_area or '' }}">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="publisher_name" class="form-label">Editora</label>
+                    <input type="text" class="form-control" id="publisher_name" name="publisher_name"
+                        value="{{ journal.publisher_name or '' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="publisher_loc" class="form-label">Local Editora</label>
+                    <input type="text" class="form-control" id="publisher_loc" name="publisher_loc"
+                        value="{{ journal.publisher_loc or '' }}">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="email" class="form-label">Email Contato</label>
+                    <input type="email" class="form-control" id="email" name="email" value="{{ journal.email or '' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="phone" class="form-label">Telefone</label>
+                    <input type="text" class="form-control" id="phone" name="phone" value="{{ journal.phone or '' }}">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="address" class="form-label">Endereço</label>
+                <textarea class="form-control" id="address" name="address"
+                    rows="2">{{ journal.address or '' }}</textarea>
+            </div>
+
+            <div class="mb-3 form-check">
+                <input type="checkbox" class="form-check-input" id="active" name="active" {{ 'checked' if not journal or
+                    journal.active else '' }}>
+                <label class="form-check-label" for="active">Ativo</label>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
+        </form>
+    </div>
+</div>
+
+{% if journal and articles %}
+<h3 class="mb-3">Artigos deste Periódico</h3>
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-sm table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Título</th>
+                        <th>Status</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for art in articles %}
+                    <tr>
+                        <td>{{ art.id }}</td>
+                        <td>{{ art.title[:100] }}...</td>
+                        <td>{{ art.status }}</td>
+                        <td>
+                            <!-- Link to edit article (future implementation) -->
+                            <a href="{{ url_for('edit_article', id=art.id) }}" class="btn btn-sm btn-outline-primary"
+                                title="Editar Artigo">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+{% endblock %}

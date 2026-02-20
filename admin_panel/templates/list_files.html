@@ -1,0 +1,117 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Arquivos</h2>
+</div>
+
+<div class="mb-3">
+    <span class="badge bg-secondary me-2">Total: {{ total_records }}</span>
+    <span class="badge bg-info me-2">Filtrados: {{ filtered_records }}</span>
+    <span class="badge bg-primary">Na página: {{ files|length }}</span>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-3">
+                <input type="text" class="form-control" name="type" placeholder="Tipo (ex: pdf)"
+                    value="{{ f_type or '' }}">
+            </div>
+            <div class="col-md-7">
+                <input type="text" class="form-control" name="path" placeholder="Caminho" value="{{ f_path or '' }}">
+            </div>
+            <div class="col-md-2">
+                <button type="submit" class="btn btn-secondary w-100">Filtrar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Tipo</th>
+                        <th>Caminho</th>
+                        <th>Artigo</th>
+                        <th>Ações</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for file in files %}
+                    <tr>
+                        <td>{{ file.id }}</td>
+                        <td>{{ file.file_type }}</td>
+                        <td>
+                            {{ file.local_path[:50] }}...
+                            {% if file.local_path %}
+                            <a href="{{ url_for('download_file', id=file.id) }}" class="ms-1" title="Download Local">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            {% endif %}
+                            {% if file.url %}
+                            <a href="{{ file.url }}" target="_blank" class="ms-1" title="Abrir URL Remota">
+                                <i class="fas fa-external-link-alt"></i>
+                            </a>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if file.article %}
+                            <a href="{{ url_for('edit_article', id=file.article.id) }}">
+                                {{ file.article.title[:30] }}...
+                            </a>
+                            {% else %}
+                            -
+                            {% endif %}
+                        </td>
+                        <td>
+                            <a href="{{ url_for('edit_file', id=file.id) }}" class="btn btn-sm btn-outline-primary"
+                                title="Editar">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <a href="{{ url_for('delete_file', id=file.id) }}" class="btn btn-sm btn-outline-danger"
+                                title="Excluir" onclick="return confirm('Tem certeza?');">
+                                <i class="fas fa-trash"></i>
+                            </a>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total > per_page %}
+        <nav aria-label="Page navigation" class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {{ 'disabled' if page <= 1 else '' }}">
+                    <a class="page-link"
+                        href="{{ url_for('list_files', page=page-1, type=f_type, path=f_path) }}">Anterior</a>
+                </li>
+
+                {% set total_pages = (total / per_page)|round(0, 'ceil')|int %}
+                {% for p in range(1, total_pages + 1) %}
+                {% if p == page or (p >= page - 2 and p <= page + 2) or p==1 or p==total_pages %} <li
+                    class="page-item {{ 'active' if p == page else '' }}">
+                    <a class="page-link" href="{{ url_for('list_files', page=p, type=f_type, path=f_path) }}">{{ p
+                        }}</a>
+                    </li>
+                    {% elif p == page - 3 or p == page + 3 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                    {% endfor %}
+
+                    <li class="page-item {{ 'disabled' if (page * per_page) >= total else '' }}">
+                        <a class="page-link"
+                            href="{{ url_for('list_files', page=page+1, type=f_type, path=f_path) }}">Próxima</a>
+                    </li>
+            </ul>
+        </nav>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

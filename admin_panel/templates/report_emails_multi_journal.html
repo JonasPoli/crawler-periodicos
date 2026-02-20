@@ -1,0 +1,162 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2 class="mb-4">Relatório: E-mails por Periódicos (Seleção Múltipla)</h2>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="GET" class="row g-3">
+            <div class="col-md-12">
+                <div class="d-flex justify-content-between align-items-center mb-2">
+                    <label class="form-label fw-bold mb-0">Selecione os Periódicos</label>
+                    <span class="badge bg-info text-dark px-3 py-2" style="font-size: 0.95rem;">
+                        Previsão total: <span id="total_emails_preview" class="fw-bold">0</span> e-mail(s)
+                    </span>
+                </div>
+                <div class="border p-3 rounded bg-light" style="max-height: 300px; overflow-y: auto;">
+                    <div class="row">
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-2 mb-2"
+                            onclick="toggleAllJournals(true)">Todas as Revistas</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary me-2 mb-2"
+                            onclick="toggleAllJournals(false)">Desmarcar Todas</button>
+                        <span class="text-muted mx-2 mb-2">|</span>
+                        {% set all_qualis = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C'] %}
+                        {% for q in all_qualis %}
+                        <button type="button" class="btn btn-sm btn-outline-info me-1 mb-2"
+                            onclick="toggleJournalsByQualis('{{ q }}')">+ {{ q }}</button>
+                        {% endfor %}
+                        <button type="button" class="btn btn-sm btn-outline-info me-1 mb-2"
+                            onclick="toggleJournalsByQualis('NONE')">+ Sem Qualis</button>
+                    </div>
+                    {% for j in journals %}
+                    <div class="col-md-6 col-lg-4 mb-2">
+                        <div class="form-check">
+                            <input class="form-check-input journal-checkbox" type="checkbox" name="journal_ids"
+                                value="{{ j.id }}" id="journal_{{ j.id }}" data-count="{{ j.email_count }}"
+                                data-qualis="{{ j.qualis if j.qualis else 'NONE' }}" {{ 'checked' if j.id in
+                                selected_journal_ids else '' }}>
+                            <label class="form-check-label text-truncate d-block" for="journal_{{ j.id }}"
+                                title="{{ j.name }} - Qualis: {{ j.qualis or 'N/A' }}">
+                                {{ j.name }}
+                                <span class="badge bg-secondary ms-1">{{ j.qualis if j.qualis else '-' }}</span>
+                                <small class="text-muted ms-1">({{ j.email_count }} e-mail{% if j.email_count != 1
+                                    %}s{% endif %})</small>
+                            </label>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+    </div>
+
+    <div class="col-md-4">
+        <label for="status" class="form-label fw-bold">Status</label>
+        <select class="form-select" id="status" name="status">
+            <option value="">Todos</option>
+            <option value="PENDING" {{ 'selected' if selected_status=='PENDING' else '' }}>Pending</option>
+            <option value="VALID" {{ 'selected' if selected_status=='VALID' else '' }}>Valid</option>
+            <option value="INVALID" {{ 'selected' if selected_status=='INVALID' else '' }}>Invalid</option>
+        </select>
+    </div>
+
+    <div class="col-md-2 d-flex align-items-end">
+        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter"></i> Filtrar</button>
+    </div>
+    </form>
+</div>
+</div>
+
+{% if selected_journal_ids %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h5 class="mb-0">Resultados encontrados: {{ emails|length }}</h5>
+    <button type="button" class="btn btn-success" onclick="exportCsv()">
+        <i class="fas fa-file-csv"></i> Exportar CSV
+    </button>
+</div>
+
+<div class="card shadow-sm">
+    <div class="card-body">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped">
+                <thead class="table-dark">
+                    <tr>
+                        <th>ID</th>
+                        <th>Email</th>
+                        <th>Status</th>
+                        <th>Artigo</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for email in emails %}
+                    <tr>
+                        <td><a href="{{ url_for('edit_email', id=email.id) }}">{{ email.id }}</a></td>
+                        <td>{{ email.email }}</td>
+                        <td>
+                            <span
+                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else ('danger' if email.verification_status == 'INVALID' else 'secondary') }}">
+                                {{ email.verification_status }}
+                            </span>
+                        </td>
+                        <td>
+                            <a href="{{ url_for('edit_article', id=email.article.id) }}">
+                                {{ email.article.title[:80] }}...
+                            </a>
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="4" class="text-center py-4">Nenhum e-mail encontrado para os filtros selecionados.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<script>
+    function updatePreview() {
+        let total = 0;
+        document.querySelectorAll('.journal-checkbox').forEach(cb => {
+            if (cb.checked) {
+                total += parseInt(cb.getAttribute('data-count') || 0, 10);
+            }
+        });
+        document.getElementById('total_emails_preview').textContent = total;
+    }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('.journal-checkbox').forEach(cb => {
+            cb.addEventListener('change', updatePreview);
+        });
+        updatePreview();
+    });
+
+    function toggleAllJournals(checked) {
+        document.querySelectorAll('.journal-checkbox').forEach(cb => {
+            cb.checked = checked;
+        });
+        updatePreview();
+    }
+
+    function toggleJournalsByQualis(qualis) {
+        // Toggle action: if all matching are checked, uncheck them. Otherwise, check them all.
+        const checkboxes = Array.from(document.querySelectorAll('.journal-checkbox')).filter(cb => cb.getAttribute('data-qualis') === qualis);
+        if (checkboxes.length === 0) return;
+
+        const allChecked = checkboxes.every(cb => cb.checked);
+        checkboxes.forEach(cb => {
+            cb.checked = !allChecked;
+        });
+        updatePreview();
+    }
+
+    function exportCsv() {
+        const url = new URL(window.location.href);
+        url.searchParams.set('export', 'csv');
+        window.location.href = url.toString();
+    }
+</script>
+{% endblock %}

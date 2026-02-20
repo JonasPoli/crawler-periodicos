@@ -1,0 +1,257 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h2>Editar Artigo</h2>
+    <a href="{{ url_for('list_articles') }}" class="btn btn-secondary"><i class="fas fa-arrow-left"></i> Voltar</a>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <form method="POST">
+            <div class="mb-3">
+                <label for="title" class="form-label">Título</label>
+                <input type="text" class="form-control" id="title" name="title" value="{{ article.title }}" required>
+            </div>
+
+            <div class="mb-3">
+                <label for="url" class="form-label">
+                    URL
+                    {% if article.url %}
+                    <a href="{{ article.url }}" target="_blank" class="ms-2" title="Abrir em nova aba">
+                        <i class="fas fa-external-link-alt"></i>
+                    </a>
+                    {% endif %}
+                </label>
+                <input type="url" class="form-control" id="url" name="url" value="{{ article.url }}">
+            </div>
+
+            <div class="row">
+                <div class="col-md-6 mb-3">
+                    <label for="doi" class="form-label">DOI</label>
+                    <input type="text" class="form-control" id="doi" name="doi" value="{{ article.doi or '' }}">
+                </div>
+                <div class="col-md-6 mb-3">
+                    <label for="language" class="form-label">Idioma</label>
+                    <input type="text" class="form-control" id="language" name="language"
+                        value="{{ article.language or '' }}">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="abstract" class="form-label">Resumo (Português)</label>
+                <textarea class="form-control" id="abstract" name="abstract"
+                    rows="5">{{ article.abstract or '' }}</textarea>
+            </div>
+
+            <div class="mb-3">
+                <label for="abstract_en" class="form-label">Abstract (Inglês)</label>
+                <textarea class="form-control" id="abstract_en" name="abstract_en"
+                    rows="5">{{ article.abstract_en or '' }}</textarea>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="page_numbers" class="form-label">Páginas</label>
+                    <input type="text" class="form-control" id="page_numbers" name="page_numbers"
+                        value="{{ article.page_numbers or '' }}">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="license_url" class="form-label">Licença (URL)</label>
+                    <input type="text" class="form-control" id="license_url" name="license_url"
+                        value="{{ article.license_url or '' }}">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="copyright_holder" class="form-label">Detentor Direitos</label>
+                    <input type="text" class="form-control" id="copyright_holder" name="copyright_holder"
+                        value="{{ article.copyright_holder or '' }}">
+                </div>
+            </div>
+
+            <div class="row">
+                <div class="col-md-4 mb-3">
+                    <label for="publication_date" class="form-label">Data Publicação</label>
+                    <input type="text" class="form-control" id="publication_date" name="publication_date"
+                        value="{{ article.publication_date or '' }}" placeholder="YYYY-MM-DD">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="submission_date" class="form-label">Data Submissão</label>
+                    <input type="text" class="form-control" id="submission_date" name="submission_date"
+                        value="{{ article.submission_date or '' }}" placeholder="YYYY-MM-DD">
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label for="acceptance_date" class="form-label">Data Aceite</label>
+                    <input type="text" class="form-control" id="acceptance_date" name="acceptance_date"
+                        value="{{ article.acceptance_date or '' }}" placeholder="YYYY-MM-DD">
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <label for="status" class="form-label">Status</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="found" {{ 'selected' if article.status=='found' else '' }}>Found</option>
+                    <option value="downloaded" {{ 'selected' if article.status=='downloaded' else '' }}>Downloaded
+                    </option>
+                    <option value="completed" {{ 'selected' if article.status=='completed' else '' }}>Completed</option>
+                    <option value="metadata_enriched" {{ 'selected' if article.status=='metadata_enriched' else '' }}>
+                        Metadata Enriched</option>
+                    <option value="error" {{ 'selected' if article.status=='error' else '' }}>Error</option>
+                </select>
+            </div>
+
+            <button type="submit" class="btn btn-primary"><i class="fas fa-save"></i> Salvar</button>
+        </form>
+    </div>
+</div>
+
+<!-- Extra Metadata Display (Read Only for now) -->
+<div class="row">
+    <!-- Authors -->
+    <div class="col-md-6 mb-4">
+        <h3 class="mb-3">Autores</h3>
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <ul class="list-group list-group-flush">
+                    {% for author in article.authors %}
+                    <li class="list-group-item">
+                        <strong>{{ author.name }}</strong>
+                        {% if author.orcid %}
+                        <br><small class="text-muted">ORCID: <a href="{{ author.orcid }}" target="_blank">{{
+                                author.orcid }}</a></small>
+                        {% endif %}
+                        {% if author.affiliation %}
+                        <br><small class="text-muted">{{ author.affiliation }}</small>
+                        {% endif %}
+                    </li>
+                    {% else %}
+                    <li class="list-group-item text-muted">Nenhum autor registrado.</li>
+                    {% endfor %}
+                </ul>
+            </div>
+        </div>
+    </div>
+
+    <!-- Keywords -->
+    <div class="col-md-6 mb-4">
+        <h3 class="mb-3">Palavras-chave</h3>
+        <div class="card shadow-sm h-100">
+            <div class="card-body">
+                <div>
+                    {% for kw in article.keywords %}
+                    <span class="badge bg-secondary mb-1">{{ kw.value }}</span>
+                    {% else %}
+                    <span class="text-muted">Sem palavras-chave.</span>
+                    {% endfor %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- References -->
+<h3 class="mb-3">Referências</h3>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <div style="max-height: 300px; overflow-y: auto;">
+            <ul class="list-group list-group-flush">
+                {% for ref in article.references %}
+                <li class="list-group-item small">
+                    {{ ref.text }}
+                    {% if ref.doi %}
+                    <a href="{{ ref.doi }}" target="_blank"
+                        class="badge bg-light text-dark text-decoration-none border ms-1">DOI</a>
+                    {% endif %}
+                </li>
+                {% else %}
+                <li class="list-group-item text-muted">Nenhuma referência extraída.</li>
+                {% endfor %}
+            </ul>
+        </div>
+    </div>
+</div>
+
+
+<!-- Files -->
+<h3 class="mb-3">Arquivos</h3>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Tipo</th>
+                    <th>Caminho</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for file in files %}
+                <tr>
+                    <td>{{ file.id }}</td>
+                    <td>{{ file.file_type }}</td>
+                    <td>
+                        {{ file.local_path }}
+                        {% if file.local_path %}
+                        <a href="{{ url_for('download_file', id=file.id) }}" class="ms-1" title="Download Local">
+                            <i class="fas fa-download"></i>
+                        </a>
+                        {% endif %}
+                        {% if file.url %}
+                        <a href="{{ file.url }}" target="_blank" class="ms-1" title="Abrir URL Remota">
+                            <i class="fas fa-external-link-alt"></i>
+                        </a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('edit_file', id=file.id) }}" class="btn btn-sm btn-outline-primary"><i
+                                class="fas fa-edit"></i></a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">Nenhum arquivo encontrado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<!-- Emails -->
+<h3 class="mb-3">E-mails Capturados</h3>
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <table class="table table-sm">
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>E-mail</th>
+                    <th>Status Verificação</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for email in emails %}
+                <tr>
+                    <td>{{ email.id }}</td>
+                    <td>{{ email.email }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'success' if email.verification_status == 'VALID' else 'secondary' }}">
+                            {{ email.verification_status }}
+                        </span>
+                    </td>
+                    <td>
+                        <a href="#" class="btn btn-sm btn-outline-primary"><i class="fas fa-edit"></i></a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4">Nenhum e-mail capturado.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+{% endblock %}

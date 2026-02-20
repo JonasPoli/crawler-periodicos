@@ -1,0 +1,59 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual Environments
+venv/
+env/
+.env
+.venv
+*.venv/
+
+# Databases
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite3
+
+# Downloads and Scraped Data
+downloads/
+downloads_ojs/
+downloads_scielo/
+
+# Generated Reports & Logs
+*.csv
+*.xlsx
+*.log
+*.jsonl
+*scraped.json
+*sample.html
+
+# Specifically ignoring generated text reports
+authors_full_report.csv
+emails.csv
+emails.xlsx
+no_emails_report.csv
+user_list.txt
+missing_journals.txt
+
+# OS Generated Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE / Editor Files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Coverage and Testing
+.coverage
+htmlcov/
+.pytest_cache/
