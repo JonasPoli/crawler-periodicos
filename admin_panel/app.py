@@ -125,7 +125,7 @@ def download_file(id):
 @app.route('/journals')
 def list_journals():
     page = request.args.get('page', 1, type=int)
-    per_page = 50
+    per_page = 200
     session = get_db()
     
     # Total unfiltered

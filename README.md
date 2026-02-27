@@ -83,6 +83,33 @@ Acesse no navegador: [http://127.0.0.1:5000](http://127.0.0.1:5000)
 - **Artigos e E-mails**: Ver metadados ricos extraídos dos artigos, ver os e-mails extraídos e se eles são válidos (`VALID`).
 - **Relatórios**: Exportar bases consolidadas de contatos (e-mails por periódicos e cruzamento de status) em arquivo `.csv`.
 
+## ➕ Como adicionar um novo periódico e extrair tudo
+
+Para adicionar um novo periódico ao crawler e configurar o sistema para encontrar todas as edições, baixar todos os artigos, extrair autores/arquivos e testar todos os e-mails encontrados, siga estes 3 passos:
+
+### 1. Adicionar o periódico à lista
+Você tem três opções para cadastrar um novo periódico:
+- **Opção A (Pelo Painel Admin):** Com o painel rodando (`python3 app.py` dentro da pasta `admin_panel`), acesse `http://127.0.0.1:5000/journals/create` no seu navegador. Preencha o formulário (Nome, URL, Tipo Fonte) e salve. *(Recomendado para uso visual)*.
+- **Opção B (Manual):** Abra o arquivo `journals.json` e adicione um novo bloco JSON com o `name`, `url` e `type` (`ojs` ou `scielo`).
+- **Opção C (Automática via Script):** Edite o arquivo `add_journals.py`, adicione o link do periódico na variável `USER_URLS` e, no terminal, rode:
+  ```bash
+  python3 add_journals.py
+  ```
+
+### 2. Sincronizar com o Banco de Dados (Apenas para Opções B e C)
+Se você cadastrou pelo **Painel Admin (Opção A)**, o periódico já foi salvo direto no banco de dados e você pode **pular este passo**.
+Caso tenha usado as opções Manuais ou via Script (`journals.json`), você precisa avisar o banco de dados que existem novos periódicos executando:
+```bash
+python3 populate_db.py
+```
+
+### 3. Rodar o "Super Processo" (Processamento Completo e Paralelo)
+Execute o orquestrador no modo `super` para ele automaticamente descobrir as edições, baixar os artigos, extrair as informações e validar os e-mails simultaneamente:
+```bash
+python3 run_fast.py super --workers 4
+```
+*(Ajuste o número de `--workers` conforme a capacidade da sua máquina para acelerar o processo).*
+
 ## 🗃️ Importação da Nota Qualis
 
 Se precisar atualizar as avaliações Qualis dos periódicos da base, substitua o arquivo da plataforma Sucupira Excel (ex: `sucupira.xlsx`) na pasta `docs/` e crie/rode um script de atualização semelhante ao `import_qualis.py` (ou acesse a rota do admin painel pertinente caso ela exista no futuro) para cruzar automaticamente pelo ISSN.

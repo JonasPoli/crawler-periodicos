@@ -8,9 +8,20 @@ from db_manager import DBManager
 from metadata_manager import MetadataManager
 from processor import Processor
 
-def log(worker_id, message):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [Processor {worker_id}] {message}")
+import logging
+
+# Ensure logs directory exists
+os.makedirs('logs', exist_ok=True)
+
+logging.basicConfig(
+    filename='logs/processor.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] [%(processName)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+def log(worker_id, message, level=logging.INFO):
+    logging.log(level, f"[Processor {worker_id}] {message}")
 
 def run_processor_worker(worker_id, stop_event=None):
     log(worker_id, "Started.")
@@ -43,24 +54,27 @@ def run_processor_worker(worker_id, stop_event=None):
                 # log(worker_id, f"Processing {article.title[:30]}...")
                 start_time = time.time()
                 
-                pdf_file = None
+                pdf_file_path = None
                 for f in article.files:
-                    if f.file_type == 'pdf':
-                        pdf_file = f
-                        break
+                    if f.file_type == 'pdf' and f.local_path:
+                        # Some versions of path might not be absolute or might be missing the directory
+                        if os.path.exists(f.local_path):
+                            pdf_file_path = f.local_path
+                            break
+                        # Also check if it works when prefixed with downloads_ojs/ downloads_scielo/ ? 
+                        # Actually just checking exists() is enough since crawler saves with directory path.
                 
-                local_path = None
-                if pdf_file and pdf_file.local_path:
-                    local_path = pdf_file.local_path
+                local_path = pdf_file_path
                 
                 if not local_path or not os.path.exists(local_path):
-                     log(worker_id, f"WARNING: File path not found for Article {article.id}. Skipping.")
+                     log(worker_id, f"WARNING: Valid file path not found on disk for Article {article.id}. Skipping.")
                      article.status = 'error_nofile'
                      article.worker_id = None
                      db_manager.session.commit()
                      continue
                 
                 # Extract
+                log(worker_id, f"STARTING EXTRACTION: Article {article.id} from {local_path}")
                 text = processor.extract_text_from_pdf(local_path)
                 emails = processor.extract_emails(text)
                 

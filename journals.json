@@ -135,6 +135,11 @@
         "type": "ojs"
     },
     {
+        "name": "Revista Owl Journal",
+        "url": "https://www.revistaowl.com.br/php/owl",
+        "type": "ojs"
+    },
+    {
         "name": "Revista DCS",
         "url": "https://ojs.revistadcs.com/index.php/revista/index",
         "type": "ojs"

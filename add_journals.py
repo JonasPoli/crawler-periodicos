@@ -146,9 +146,9 @@ def clean_url(url):
         url = url[:-1]
     
     # Specific fix for OJS: remove /index.php/journalname/index if present
-    # to get base url, or keep it if that's what we want?
-    # Usually orchestrator expects base URL. 
-    # For OJS, base URL is often .../index.php/journalname
+    # to get base url.  For OJS, base URL is often .../index.php/journalname
+    if url.endswith('/index'):
+        url = url[:-6]
     
     return url
 

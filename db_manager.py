@@ -62,6 +62,59 @@ class DBManager:
         journal = self.session.query(Journal).get(journal_id)
         return journal and journal.status == 'completed'
 
+    def get_journals_with_no_emails(self):
+        """
+        Return a list of Journal objects that have no CapturedEmail entries
+        across all of their articles. Only consider completed journals.
+        """
+        # Sub-query to find journals that have at least one captured email
+        subq = self.session.query(CapturedEmail.article_id).distinct()
+        
+        # Main query: Completed journals where none of their articles appear in subq
+        # We only want to test journals that have finished processing.
+        journals = (
+            self.session.query(Journal)
+            .outerjoin(Edition, Journal.id == Edition.journal_id)
+            .outerjoin(Article, Edition.id == Article.edition_id)
+            .filter(Journal.status == 'completed')
+            .filter(~Article.id.in_(subq))
+            .all()
+        )
+        return journals
+
+    def reset_journal_for_rerun(self, journal_id):
+        """
+        Clear timestamps and lock fields so the journal can be processed again.
+        """
+        try:
+            # Reset last_crawled_at and status so discovery will treat it as new
+            self.session.query(Journal).filter_by(id=journal_id).update({
+                "last_crawled_at": None,
+                "status": "pending"
+            })
+            
+            # Reset editions
+            self.session.query(Edition).filter_by(journal_id=journal_id).update({
+                "status": "found",
+                "worker_id": None,
+                "lock_time": None
+            })
+            
+            # Reset articles
+            subq = self.session.query(Edition.id).filter_by(journal_id=journal_id)
+            self.session.query(Article).filter(Article.edition_id.in_(subq)).update({
+                "status": "found",
+                "worker_id": None,
+                "lock_time": None
+            }, synchronize_session=False)
+            
+            self.session.commit()
+            return True
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error resetting journal {journal_id}: {e}")
+            return False
+
     def mark_journal_completed(self, journal_id):
         journal = self.session.query(Journal).get(journal_id)
         if journal:
@@ -199,9 +252,25 @@ class DBManager:
              article = self.session.query(Article).filter_by(url=url).first()
         
         if not article:
-             article = self.session.query(Article).filter_by(edition_id=edition_id, title=title).first()
+             if title and title != "Unknown Title":
+                 article = self.session.query(Article).filter_by(edition_id=edition_id, title=title).first()
 
         if article:
+            # Update title if it was a placeholder
+            if title and title != "Unknown Title" and article.title == "Unknown Title":
+                article.title = title
+                self.session.commit()
+            
+            # Update abstract if provided
+            if abstract and not article.abstract:
+                article.abstract = abstract
+                self.session.commit()
+                
+            # Handle Authors for existing article too
+            if authors_list:
+                for auth_data in authors_list:
+                    self.link_author_to_article(article, auth_data)
+                    
             return article # Already exists
 
         article = Article(
@@ -422,11 +491,28 @@ class DBManager:
         ).first()
         
         if not existing:
+            # Check if this email was already verified in ANOTHER article to avoid re-testing
+            already_tested = self.session.query(CapturedEmail).filter(
+                CapturedEmail.email == email_normalized,
+                CapturedEmail.verification_status.in_(['VALID', 'INVALID'])
+            ).first()
+            
+            initial_status = 'PENDING'
+            if already_tested:
+                initial_status = already_tested.verification_status
+                
             captured = CapturedEmail(
                 article_id=article_id,
                 email=email_normalized,
-                verification_status='PENDING'
+                verification_status=initial_status
             )
+            # If we copy from a previously tested email, we can also copy its details
+            if already_tested:
+                captured.valid_syntax = already_tested.valid_syntax
+                captured.valid_domain = already_tested.valid_domain
+                captured.valid_mx = already_tested.valid_mx
+                captured.valid_smtp = already_tested.valid_smtp
+                
             self.session.add(captured)
             self.session.commit()
             return captured

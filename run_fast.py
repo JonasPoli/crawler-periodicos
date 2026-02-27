@@ -14,7 +14,7 @@ def run_discovery_phase():
     print("--- STARTING DISCOVERY PHASE ---")
     db_manager = DBManager()
     
-    journals = db_manager.session.query(Journal).filter_by(active=True).all()
+    journals = db_manager.session.query(Journal).filter_by(active=True).order_by(Journal.id.desc()).all()
     print(f"Loaded {len(journals)} journals.")
     
     from ojs_crawler import OJSCrawler
@@ -127,7 +127,70 @@ def monitor_progress(stop_event):
         pbar_crawl.close()
         pbar_process.close()
         pbar_verify.close()
+        pbar_verify.close()
         db_manager.close()
+
+def reprocess_zero_email_journals(workers):
+    """
+    Detect journals that ended with zero captured emails and run the
+    full pipeline again for them.
+    """
+    db_manager = DBManager()
+    zero_email_journals = db_manager.get_journals_with_no_emails()
+    if not zero_email_journals:
+        print("No journals with zero emails – nothing to re-process.")
+        return
+
+    print(f"Re-processing {len(zero_email_journals)} journal(s) with zero emails.")
+    # Use standard logging
+    import logging
+    os.makedirs('logs', exist_ok=True)
+    logging.basicConfig(
+        filename='logs/reprocess.log',
+        level=logging.INFO,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S',
+        force=True
+    )
+    
+    for journal in zero_email_journals:
+        logging.info(f"Re-processing journal {journal.id} ({journal.name}) – zero emails")
+        db_manager.reset_journal_for_rerun(journal.id)
+        
+    db_manager.close()
+
+    # Run discovery only for the selected journals
+    # (the existing discovery phase already loops over all active journals,
+    #  but because we cleared `last_crawled_at` it will pick them up again)
+    run_discovery_phase()
+
+    # Run the workers again – same as the normal super flow
+    stop_event = multiprocessing.Event()
+    processes = []
+    
+    for i in range(workers):
+        p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-Rep-{i+1}", stop_event))
+        p.start()
+        processes.append(p)
+        
+    for i in range(workers):
+        p = multiprocessing.Process(target=run_processor_worker, args=(f"Proc-Rep-{i+1}", stop_event))
+        p.start()
+        processes.append(p)
+        
+    for i in range(workers):
+        p = multiprocessing.Process(target=run_verifier_worker, args=(f"Veri-Rep-{i+1}", stop_event))
+        p.start()
+        processes.append(p)
+
+    try:
+        monitor_progress(stop_event)
+    except KeyboardInterrupt:
+        print("\nStopping RE-PROCESS...")
+        stop_event.set()
+        for p in processes:
+            p.join()
+        print("Re-process done.")
 
 def run_parallel_workers(target_func, num_workers=4, label="Worker"):
     processes = []
@@ -237,6 +300,12 @@ def main():
             for p in processes:
                 p.join()
             print("Done.")
+
+        # ----- NEW STEP: Re-process journals with zero emails -----
+        # Only run if we actually completed the main super process and weren't interrupted early
+        if not stop_event.is_set():
+            print("\n--- Phase 2: RE-VERIFY ZERO-EMAIL JOURNALS ---")
+            reprocess_zero_email_journals(args.workers)
 
 if __name__ == "__main__":
     multiprocessing.set_start_method('spawn', force=True)

@@ -8,9 +8,20 @@ from metadata_manager import MetadataManager
 from scielo_crawler import SciELOCrawler
 from ojs_crawler import OJSCrawler
 
-def log(worker_id, message):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [Worker {worker_id}] {message}")
+import logging
+
+# Ensure logs directory exists
+os.makedirs('logs', exist_ok=True)
+
+logging.basicConfig(
+    filename='logs/crawler.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] [%(processName)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+def log(worker_id, message, level=logging.INFO):
+    logging.log(level, f"[Worker {worker_id}] {message}")
 
 def run_crawler_worker(worker_id, stop_event=None):
     log(worker_id, "Started.")
@@ -127,6 +138,7 @@ def run_crawler_worker(worker_id, stop_event=None):
                         filename = meta.get('pdf_filename')
                         
                         if pdf_url:
+                            log(worker_id, f"STARTING DOWNLOAD: Article {article.id} -> {pdf_url}")
                             local_path = crawler.download_pdf_direct(pdf_url, filename)
                             duration = time.time() - start_time
                             

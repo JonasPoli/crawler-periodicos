@@ -78,17 +78,7 @@ class MetadataManager:
             authors_list=authors_list
         )
 
-        # Add File
-        if pdf_filename:
-            # Assuming processor/crawler saves to 'downloads_scielo' or 'downloads_ojs' based on simple logic
-            # but here we just get the filename.
-            # Let's just store the filename/path relative to download dir.
-            self.db_manager.add_file(
-                article_id=article.id,
-                local_path=pdf_filename,
-                url=pdf_url,
-                file_type='pdf'
-            )
+        # File is added directly by worker_crawler.py now with the correct relative path
 
     def load_metadata(self):
         """

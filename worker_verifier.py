@@ -13,9 +13,20 @@ from database import CapturedEmail
 # Regex for basic syntax
 EMAIL_REGEX = re.compile(r"^[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z0-9-.]+$")
 
-def log(worker_id, message):
-    timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    print(f"[{timestamp}] [Verifier {worker_id}] {message}")
+import logging
+
+# Ensure logs directory exists
+os.makedirs('logs', exist_ok=True)
+
+logging.basicConfig(
+    filename='logs/verifier.log',
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] [%(processName)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+
+def log(worker_id, message, level=logging.INFO):
+    logging.log(level, f"[Verifier {worker_id}] {message}")
 
 def verify_syntax(email):
     return bool(EMAIL_REGEX.match(email))
@@ -98,6 +109,7 @@ def run_verifier_worker(worker_id, stop_event=None):
             try:
                 start_time = time.time()
                 # 1. Syntax
+                log(worker_id, f"STARTING VERIFICATION: {email_addr}")
                 valid_syntax = verify_syntax(email_addr)
                 email_record.valid_syntax = valid_syntax
                 

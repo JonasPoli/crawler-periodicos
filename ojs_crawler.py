@@ -137,11 +137,15 @@ class OJSCrawler:
         title = "Unknown Title"
         # Meta tag preferred
         meta_title = soup.find('meta', attrs={'name': 'citation_title'})
-        if meta_title:
+        if meta_title and meta_title.get('content', '').strip():
              title = meta_title['content']
         else:
-             h1 = soup.find('h1')
-             if h1: title = h1.get_text(strip=True)
+             h1 = soup.find('h1', class_='page_title')
+             if h1: 
+                 title = h1.get_text(strip=True)
+             else:
+                 h1 = soup.find('h1')
+                 if h1: title = h1.get_text(strip=True)
         
         # Authors
         authors = "Unknown Authors"
@@ -155,14 +159,19 @@ class OJSCrawler:
         # PDF Link
         pdf_url = None
         pdf_meta = soup.find('meta', attrs={'name': 'citation_pdf_url'})
-        if pdf_meta:
+        if pdf_meta and pdf_meta.get('content', '').strip():
             pdf_url = pdf_meta['content']
         else:
-            for a in soup.find_all('a', href=True):
-                text = a.get_text(strip=True).upper()
-                if 'PDF' in text:
-                    pdf_url = a['href']
-                    break
+            # Check OJS 3.x galley links
+            galley = soup.find('a', class_=lambda c: c and 'obj_galley_link' in c and 'pdf' in c)
+            if galley and galley.get('href'):
+                pdf_url = galley['href']
+            else:
+                for a in soup.find_all('a', href=True):
+                    text = a.get_text(strip=True).upper()
+                    if 'PDF' in text:
+                        pdf_url = a['href']
+                        break
         
         download_url = None
         filename = None
