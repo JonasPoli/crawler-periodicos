@@ -583,19 +583,20 @@ def report_emails_multi_journal():
         if status_filter:
             query = query.filter(CapturedEmail.verification_status == status_filter)
             
-        emails = query.all()
-        
         if export == 'csv':
+            emails = query.all()
             si = io.StringIO()
             cw = csv.writer(si)
-            cw.writerow(['ID', 'Email', 'Status', 'Article ID', 'Article Title'])
+            cw.writerow(['ID do Periódico', 'Nome do Periódico', 'ID', 'Email', 'Status', 'Article ID', 'Article Title'])
             for email in emails:
-                cw.writerow([email.id, email.email, email.verification_status, email.article.id, email.article.title])
+                cw.writerow([email.article.edition.journal.id, email.article.edition.journal.name, email.id, email.email, email.verification_status, email.article.id, email.article.title])
             
             output = make_response(si.getvalue())
             output.headers["Content-Disposition"] = "attachment; filename=emails_multi_journal.csv"
             output.headers["Content-type"] = "text/csv"
             return output
+            
+        emails = query.limit(1000).all()
 
     return render_template('report_emails_multi_journal.html', 
                            journals=journals, 
