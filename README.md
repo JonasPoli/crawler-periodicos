@@ -106,7 +106,7 @@ python3 populate_db.py
 ### 3. Rodar o "Super Processo" (Processamento Completo e Paralelo)
 Execute o orquestrador no modo `super` para ele automaticamente descobrir as edições, baixar os artigos, extrair as informações e validar os e-mails simultaneamente:
 ```bash
-python3 run_fast.py super --workers 4
+venv/bin/python3 run_fast.py super --workers 4
 ```
 *(Ajuste o número de `--workers` conforme a capacidade da sua máquina para acelerar o processo).*
 

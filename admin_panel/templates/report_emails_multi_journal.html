@@ -37,7 +37,7 @@
                                 selected_journal_ids else '' }}>
                             <label class="form-check-label text-truncate d-block" for="journal_{{ j.id }}"
                                 title="{{ j.name }} - Qualis: {{ j.qualis or 'N/A' }}">
-                                {{ j.name }}
+                                [{{ j.id }}] {{ j.name }}
                                 <span class="badge bg-secondary ms-1">{{ j.qualis if j.qualis else '-' }}</span>
                                 <small class="text-muted ms-1">({{ j.email_count }} e-mail{% if j.email_count != 1
                                     %}s{% endif %})</small>

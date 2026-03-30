@@ -11,7 +11,7 @@
                 <select class="form-select" id="journal_id" name="journal_id" onchange="this.form.submit()">
                     <option value="">Selecione um periódico...</option>
                     {% for j in journals %}
-                    <option value="{{ j.id }}" {{ 'selected' if selected_journal_id==j.id else '' }}>{{ j.name }}
+                    <option value="{{ j.id }}" {{ 'selected' if selected_journal_id==j.id else '' }}>[{{ j.id }}] {{ j.name }}
                     </option>
                     {% endfor %}
                 </select>
