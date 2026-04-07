@@ -153,26 +153,23 @@ class DBManager:
         edition = self.session.query(Edition).filter_by(url=url).first()
         return edition and edition.status == 'completed'
 
-    def get_next_pending_edition(self, worker_id):
+    def get_next_pending_edition(self, worker_id, journal_id=None):
         """
         Atomically find and lock an edition for processing.
         """
-        # Find one that is pending or found, and NOT locked
-        # SQLite doesn't support SELECT ... FOR UPDATE, so we do best effort with check-then-set
-        # causing potential race conditions but acceptable for this scale if we handle it.
-        # Better: Update status where status='found' LIMIT 1
-        
-        # We need to find one.
-        # Filtering by status='found' (assuming initial state)
-        
         try:
             # First, try to find a candidate
             # We filter by journal.active=True as well
-            candidate = self.session.query(Edition).join(Journal).filter(
+            query = self.session.query(Edition).join(Journal).filter(
                 Journal.active == True,
                 Edition.status == 'found', # or 'pending'
                 Edition.worker_id == None
-            ).first()
+            )
+            
+            if journal_id:
+                query = query.filter(Journal.id == journal_id)
+                
+            candidate = query.first()
             
             if candidate:
                 candidate.status = 'processing'
@@ -392,7 +389,7 @@ class DBManager:
             
         return updated_count
 
-    def get_next_pending_article_for_crawling(self, worker_id):
+    def get_next_pending_article_for_crawling(self, worker_id, journal_id=None):
         """
         Get next article that needs PDF download. 
         Status: 'found' -> 'processing_crawling'
@@ -401,10 +398,15 @@ class DBManager:
             # Optimistic locking loop
             for _ in range(3): # 3 attempts
                 # 1. Select candidate
-                candidate = self.session.query(Article).filter(
+                query = self.session.query(Article).join(Edition).join(Journal).filter(
                     Article.status == 'found',
                     Article.worker_id == None
-                ).first()
+                )
+                
+                if journal_id:
+                    query = query.filter(Journal.id == journal_id)
+                
+                candidate = query.first()
                 
                 if not candidate:
                     return None
@@ -436,7 +438,7 @@ class DBManager:
             print(f"Error locking article: {e}")
             return None
 
-    def get_next_article_for_processing(self, worker_id):
+    def get_next_article_for_processing(self, worker_id, journal_id=None):
         """
         Get next article that needs extraction. 
         Status: 'downloaded' -> 'processing_extraction'
@@ -444,10 +446,15 @@ class DBManager:
         try:
             for _ in range(3):
                 # 1. Select candidate
-                candidate = self.session.query(Article).filter(
+                query = self.session.query(Article).join(Edition).join(Journal).filter(
                     Article.status == 'downloaded',
                     Article.worker_id == None
-                ).first()
+                )
+                
+                if journal_id:
+                    query = query.filter(Journal.id == journal_id)
+                
+                candidate = query.first()
                 
                 if not candidate:
                     return None
@@ -518,16 +525,21 @@ class DBManager:
             return captured
         return existing
 
-    def get_next_email_for_verification(self, worker_id):
+    def get_next_email_for_verification(self, worker_id, journal_id=None):
         """
         Get next PENDING email for verification. 
         """
         try:
             for _ in range(3):
-                candidate = self.session.query(CapturedEmail).filter(
+                query = self.session.query(CapturedEmail).join(Article).join(Edition).join(Journal).filter(
                     CapturedEmail.verification_status == 'PENDING',
                     CapturedEmail.worker_id == None
-                ).first()
+                )
+                
+                if journal_id:
+                    query = query.filter(Journal.id == journal_id)
+                
+                candidate = query.first()
                 
                 if not candidate:
                     return None

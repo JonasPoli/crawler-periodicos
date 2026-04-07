@@ -78,7 +78,7 @@ def verify_smtp(email, mx_record):
     except Exception as e:
         return False
 
-def run_verifier_worker(worker_id, stop_event=None):
+def run_verifier_worker(worker_id, stop_event=None, journal_id=None):
     log(worker_id, "Started.")
     
     db_manager = DBManager()
@@ -90,7 +90,7 @@ def run_verifier_worker(worker_id, stop_event=None):
             if stop_event and stop_event.is_set():
                 break
 
-            email_record = db_manager.get_next_email_for_verification(worker_id)
+            email_record = db_manager.get_next_email_for_verification(worker_id, journal_id=journal_id)
             
             if not email_record:
                 empty_cycles += 1

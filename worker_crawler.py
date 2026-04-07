@@ -23,7 +23,7 @@ logging.basicConfig(
 def log(worker_id, message, level=logging.INFO):
     logging.log(level, f"[Worker {worker_id}] {message}")
 
-def run_crawler_worker(worker_id, stop_event=None):
+def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
     log(worker_id, "Started.")
     
     db_manager = DBManager()
@@ -40,7 +40,7 @@ def run_crawler_worker(worker_id, stop_event=None):
                 break
 
             # PRIORITY 1: Process Pending Editions (Discover Articles)
-            edition = db_manager.get_next_pending_edition(worker_id)
+            edition = db_manager.get_next_pending_edition(worker_id, journal_id=journal_id)
             
             if edition:
                 empty_cycles = 0
@@ -99,7 +99,7 @@ def run_crawler_worker(worker_id, stop_event=None):
                 continue # Loop again to prefer Editions until exhausted
 
             # PRIORITY 2: Process Pending Articles (Download PDF)
-            article = db_manager.get_next_pending_article_for_crawling(worker_id)
+            article = db_manager.get_next_pending_article_for_crawling(worker_id, journal_id=journal_id)
             
             if article:
                 empty_cycles = 0

@@ -2,6 +2,7 @@ import argparse
 import multiprocessing
 import time
 import sys
+import os
 import threading
 from db_manager import DBManager
 from worker_crawler import run_crawler_worker
@@ -10,11 +11,15 @@ from worker_verifier import run_verifier_worker
 from database import Journal, Article, Edition, CapturedEmail
 from tqdm import tqdm
 
-def run_discovery_phase():
+def run_discovery_phase(journal_id=None):
     print("--- STARTING DISCOVERY PHASE ---")
     db_manager = DBManager()
     
-    journals = db_manager.session.query(Journal).filter_by(active=True).order_by(Journal.id.desc()).all()
+    query = db_manager.session.query(Journal).filter_by(active=True)
+    if journal_id:
+        query = query.filter(Journal.id == journal_id)
+        
+    journals = query.order_by(Journal.id.desc()).all()
     print(f"Loaded {len(journals)} journals.")
     
     from ojs_crawler import OJSCrawler
@@ -73,60 +78,79 @@ def run_discovery_phase():
     pbar.close()
     print("--- DISCOVERY FINISHED ---")
 
-def monitor_progress(stop_event):
+def monitor_progress(stop_event, journal_id=None):
     """
     Monitor DB and update progress bars.
+    When journal_id is provided, all counts are restricted to that journal.
     """
     db_manager = DBManager()
-    
-    # Get initial counts
-    # We might need total counts.
-    # Total Articles to Crawl = Status Found + Processing
-    # Total Articles to Process = Status Downloaded + Processing Extraction
-    # Total Emails to Verify = Status PENDING + PROCESSING
-    
-    # This is tricky because the totals change as we discover.
-    # We will just show "Pending" counts.
-    
-    pbar_crawl = tqdm(desc="Crawling (Articles Pending)", unit="article")
-    pbar_process = tqdm(desc="Processing (PDFs Pending)", unit="pdf")
-    pbar_verify = tqdm(desc="Verifying (Emails Pending)", unit="email")
-    
+    session = db_manager.session
+
+    label_suffix = f" [Journal #{journal_id}]" if journal_id else ""
+
+    pbar_crawl = tqdm(desc=f"Crawling (Articles){label_suffix}", unit="article")
+    pbar_process = tqdm(desc=f"Processing (PDFs){label_suffix}", unit="pdf")
+    pbar_verify = tqdm(desc=f"Verifying (Emails){label_suffix}", unit="email")
+
     try:
         while not stop_event.is_set():
-            session = db_manager.session
-            
-            # Crawling
-            c_pending = session.query(Article).filter(Article.status.in_(['found', 'processing_crawling'])).count()
-            c_completed = session.query(Article).filter(Article.status.in_(['downloaded', 'completed'])).count() # approximate
-            
-            # Processing
-            p_pending = session.query(Article).filter(Article.status.in_(['downloaded', 'processing_extraction'])).count()
-            
-            # Verifying
-            v_pending = session.query(CapturedEmail).filter(CapturedEmail.verification_status.in_(['PENDING', 'PROCESSING'])).count()
-            v_completed = session.query(CapturedEmail).filter(CapturedEmail.verification_status.in_(['VALID', 'INVALID'])).count()
-            
-            pbar_crawl.n = c_completed
-            pbar_crawl.total = c_completed + c_pending
-            pbar_crawl.refresh()
-            
-            pbar_process.n = 0 # No good "total" tracked easily for processed count without heavy query
-            pbar_process.set_postfix_str(f"Queue: {p_pending}")
-            pbar_process.refresh()
-            
-            pbar_verify.n = v_completed
-            pbar_verify.total = v_completed + v_pending
-            pbar_verify.refresh()
-            
+            try:
+                # --- Build base queries scoped to journal if needed ---
+                article_base = session.query(Article).join(Edition).join(Journal)
+                email_base = session.query(CapturedEmail).join(Article).join(Edition).join(Journal)
+
+                if journal_id:
+                    article_base = article_base.filter(Journal.id == journal_id)
+                    email_base = email_base.filter(Journal.id == journal_id)
+
+                # Crawling
+                c_pending = article_base.filter(
+                    Article.status.in_(['found', 'processing_crawling'])
+                ).count()
+                c_completed = article_base.filter(
+                    Article.status.in_(['downloaded', 'completed', 'no_pdf',
+                                        'error_download', 'error_metadata', 'error_exception'])
+                ).count()
+
+                # Processing
+                p_pending = article_base.filter(
+                    Article.status.in_(['downloaded', 'processing_extraction'])
+                ).count()
+                p_completed = article_base.filter(
+                    Article.status.in_(['completed'])
+                ).count()
+
+                # Verifying
+                v_pending = email_base.filter(
+                    CapturedEmail.verification_status.in_(['PENDING', 'PROCESSING'])
+                ).count()
+                v_completed = email_base.filter(
+                    CapturedEmail.verification_status.in_(['VALID', 'INVALID'])
+                ).count()
+
+                pbar_crawl.n = c_completed
+                pbar_crawl.total = c_completed + c_pending
+                pbar_crawl.refresh()
+
+                pbar_process.n = p_completed
+                pbar_process.total = p_completed + p_pending
+                pbar_process.set_postfix_str(f"Queue: {p_pending}")
+                pbar_process.refresh()
+
+                pbar_verify.n = v_completed
+                pbar_verify.total = v_completed + v_pending
+                pbar_verify.refresh()
+
+            except Exception:
+                pass
+
             time.sleep(2)
-            
+
     except:
         pass
     finally:
         pbar_crawl.close()
         pbar_process.close()
-        pbar_verify.close()
         pbar_verify.close()
         db_manager.close()
 
@@ -162,6 +186,8 @@ def reprocess_zero_email_journals(workers):
     # Run discovery only for the selected journals
     # (the existing discovery phase already loops over all active journals,
     #  but because we cleared `last_crawled_at` it will pick them up again)
+    # Note: reprocess_zero_email_journals doesn't currently support journal_id filtering 
+    # but it could be added if needed. For now, it processes all zero-email journals.
     run_discovery_phase()
 
     # Run the workers again – same as the normal super flow
@@ -192,7 +218,7 @@ def reprocess_zero_email_journals(workers):
             p.join()
         print("Re-process done.")
 
-def run_parallel_workers(target_func, num_workers=4, label="Worker"):
+def run_parallel_workers(target_func, num_workers=4, label="Worker", journal_id=None):
     processes = []
     stop_event = multiprocessing.Event()
     
@@ -200,7 +226,7 @@ def run_parallel_workers(target_func, num_workers=4, label="Worker"):
     
     for i in range(num_workers):
         worker_id = f"{label}-{i+1}"
-        p = multiprocessing.Process(target=target_func, args=(worker_id, stop_event))
+        p = multiprocessing.Process(target=target_func, args=(worker_id, stop_event, journal_id))
         p.start()
         processes.append(p)
     
@@ -233,6 +259,7 @@ def main():
     )
     parser.add_argument('mode', choices=['discover', 'crawl', 'process', 'verify', 'reset', 'all', 'super'], help="Mode of operation")
     parser.add_argument('--workers', type=int, default=4, help="Number of parallel workers per phase")
+    parser.add_argument('--id', type=int, default=None, help="Specific Journal ID to process")
     
     args = parser.parse_args()
     
@@ -243,16 +270,16 @@ def main():
         db_manager.reset_stuck_tasks()
         
     elif args.mode == 'discover':
-        run_discovery_phase()
+        run_discovery_phase(args.id)
         
     elif args.mode == 'crawl':
-        run_parallel_workers(run_crawler_worker, args.workers, "Crawler")
+        run_parallel_workers(run_crawler_worker, args.workers, "Crawler", args.id)
         
     elif args.mode == 'process':
-        run_parallel_workers(run_processor_worker, args.workers, "Processor")
+        run_parallel_workers(run_processor_worker, args.workers, "Processor", args.id)
         
     elif args.mode == 'verify':
-        run_parallel_workers(run_verifier_worker, args.workers, "Verifier")
+        run_parallel_workers(run_verifier_worker, args.workers, "Verifier", args.id)
         
     elif args.mode == 'super':
         # The FULL SUPER PROCESS
@@ -268,44 +295,64 @@ def main():
         
         # 1. Discovery (can generate work while others run?)
         # Discovery is usually fast enough to run first.
-        run_discovery_phase()
+        run_discovery_phase(args.id)
         
         # 2. Start Workers
         # Crawlers
         for i in range(args.workers):
-            p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-{i+1}", stop_event))
+            p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-{i+1}", stop_event, args.id))
             p.start()
             processes.append(p)
             
         # Processors
         for i in range(args.workers):
-            p = multiprocessing.Process(target=run_processor_worker, args=(f"Proc-{i+1}", stop_event))
+            p = multiprocessing.Process(target=run_processor_worker, args=(f"Proc-{i+1}", stop_event, args.id))
             p.start()
             processes.append(p)
             
         # Verifiers
         for i in range(args.workers):
-            p = multiprocessing.Process(target=run_verifier_worker, args=(f"Veri-{i+1}", stop_event))
+            p = multiprocessing.Process(target=run_verifier_worker, args=(f"Veri-{i+1}", stop_event, args.id))
             p.start()
             processes.append(p)
             
-        # Monitor
+        # Monitor (runs in background thread so we can also watch worker processes)
+        monitor_thread = threading.Thread(
+            target=monitor_progress,
+            args=(stop_event,),
+            kwargs={"journal_id": args.id},
+            daemon=True
+        )
+        monitor_thread.start()
+
         try:
-            # We can run a fancy dashboard here using curses or just tqdm monitoring loop in main thread
-            monitor_progress(stop_event)
-            
+            # Main thread: wait until all worker processes finish naturally
+            while True:
+                alive = [p for p in processes if p.is_alive()]
+                if not alive:
+                    print("\nAll workers finished.")
+                    stop_event.set()
+                    break
+                time.sleep(2)
+
         except KeyboardInterrupt:
             print("\nStopping SUPER PROCESS...")
             stop_event.set()
-            for p in processes:
-                p.join()
-            print("Done.")
+
+        # Wait for workers and monitor thread
+        for p in processes:
+            p.join()
+        monitor_thread.join(timeout=5)
+        print("Done.")
 
         # ----- NEW STEP: Re-process journals with zero emails -----
         # Only run if we actually completed the main super process and weren't interrupted early
-        if not stop_event.is_set():
+        # (we check if all processes finished with exit code 0)
+        all_ok = all(p.exitcode == 0 for p in processes)
+        if all_ok:
             print("\n--- Phase 2: RE-VERIFY ZERO-EMAIL JOURNALS ---")
             reprocess_zero_email_journals(args.workers)
+
 
 if __name__ == "__main__":
     multiprocessing.set_start_method('spawn', force=True)

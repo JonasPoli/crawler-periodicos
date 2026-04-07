@@ -117,3 +117,8 @@ Se precisar atualizar as avaliações Qualis dos periódicos da base, substitua 
 ## 💾 Acesso Direto ao Banco (Para devs)
 O arquivo gerado fica em `./crawler.db`. Ele pode ser aberto por qualquer gerenciador de banco de dados compatível com SQLite (como DBeaver, SQLite Studio, ou extensão de VSCode).
 Tabelas chaves: `journals`, `editions`, `articles`, `files`, `captured_emails`.
+
+
+## Só uma revista:
+Para rodar apenas para a revista de id=1
+venv/bin/python3 run_fast.py super --workers 4 --id 1

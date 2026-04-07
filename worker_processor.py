@@ -23,7 +23,7 @@ logging.basicConfig(
 def log(worker_id, message, level=logging.INFO):
     logging.log(level, f"[Processor {worker_id}] {message}")
 
-def run_processor_worker(worker_id, stop_event=None):
+def run_processor_worker(worker_id, stop_event=None, journal_id=None):
     log(worker_id, "Started.")
     
     db_manager = DBManager()
@@ -38,7 +38,7 @@ def run_processor_worker(worker_id, stop_event=None):
             if stop_event and stop_event.is_set():
                 break
 
-            article = db_manager.get_next_article_for_processing(worker_id)
+            article = db_manager.get_next_article_for_processing(worker_id, journal_id=journal_id)
             
             if not article:
                 empty_cycles += 1
