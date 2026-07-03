@@ -37,47 +37,79 @@ def dashboard():
     active_journals = session.query(Journal).filter(Journal.active == True).count()
     inactive_journals = total_journals - active_journals
     
+    journals = session.query(Journal).order_by(Journal.name).all()
+    journal_id = request.args.get('journal_id', type=int)
+
     # --- Editions Stats (Crawling Phase) ---
-    total_editions = session.query(Edition).count()
-    # 'completed' editions
-    completed_editions = session.query(Edition).filter(Edition.status == 'completed').count()
+    if journal_id:
+        total_editions = session.query(Edition).filter(Edition.journal_id == journal_id).count()
+        completed_editions = session.query(Edition).filter(Edition.journal_id == journal_id, Edition.status == 'completed').count()
+        recent_completed_editions = session.query(Edition).filter(
+            Edition.journal_id == journal_id,
+            Edition.status == 'completed',
+            Edition.updated_at >= ten_mins_ago
+        ).count()
+    else:
+        total_editions = session.query(Edition).count()
+        completed_editions = session.query(Edition).filter(Edition.status == 'completed').count()
+        recent_completed_editions = session.query(Edition).filter(
+            Edition.status == 'completed',
+            Edition.updated_at >= ten_mins_ago
+        ).count()
+
     editions_pct = round((completed_editions / total_editions * 100) if total_editions > 0 else 0, 1)
-    
-    # Items completed in last 10 mins (we use updated_at since it changes when status becomes 'completed')
-    recent_completed_editions = session.query(Edition).filter(
-        Edition.status == 'completed',
-        Edition.updated_at >= ten_mins_ago
-    ).count()
     editions_speed = round(recent_completed_editions / 10.0, 1) # per min
     remaining_editions = total_editions - completed_editions
     editions_time_remaining_mins = round(remaining_editions / editions_speed) if editions_speed > 0 else -1
 
     # --- Articles Stats (Processing Phase) ---
-    total_articles = session.query(Article).count()
-    completed_articles = session.query(Article).filter(Article.status == 'completed').count()
+    if journal_id:
+        total_articles = session.query(Article).join(Edition).filter(Edition.journal_id == journal_id).count()
+        completed_articles = session.query(Article).join(Edition).filter(Edition.journal_id == journal_id, Article.status == 'completed').count()
+        recent_files_created = session.query(File).join(Article).join(Edition).filter(
+            Edition.journal_id == journal_id,
+            File.created_at >= ten_mins_ago
+        ).count()
+    else:
+        total_articles = session.query(Article).count()
+        completed_articles = session.query(Article).filter(Article.status == 'completed').count()
+        recent_files_created = session.query(File).filter(
+            File.created_at >= ten_mins_ago
+        ).count()
+
     not_completed_articles = total_articles - completed_articles
     articles_pct = round((completed_articles / total_articles * 100) if total_articles > 0 else 0, 1)
-    
-    # In articles, let's just use recent File creations as proxy for processing speed, 
-    # or better, just check if we have a recently created File (meaning processing is happening)
-    recent_files_created = session.query(File).filter(
-        File.created_at >= ten_mins_ago
-    ).count()
     articles_speed = round(recent_files_created / 10.0, 1) # per min
     remaining_articles_to_process = total_articles - completed_articles
     articles_time_remaining_mins = round(remaining_articles_to_process / articles_speed) if articles_speed > 0 else -1
 
     # --- Emails Stats (Verification Phase) ---
-    total_emails = session.query(CapturedEmail).count()
-    valid_emails = session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'VALID').count()
-    invalid_emails = session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'INVALID').count()
+    if journal_id:
+        total_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(Edition.journal_id == journal_id).count()
+        valid_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(
+            Edition.journal_id == journal_id,
+            CapturedEmail.verification_status == 'VALID'
+        ).count()
+        invalid_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(
+            Edition.journal_id == journal_id,
+            CapturedEmail.verification_status == 'INVALID'
+        ).count()
+        recent_verified_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(
+            Edition.journal_id == journal_id,
+            CapturedEmail.verification_status.in_(['VALID', 'INVALID']),
+            CapturedEmail.updated_at >= ten_mins_ago
+        ).count()
+    else:
+        total_emails = session.query(CapturedEmail).count()
+        valid_emails = session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'VALID').count()
+        invalid_emails = session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'INVALID').count()
+        recent_verified_emails = session.query(CapturedEmail).filter(
+            CapturedEmail.verification_status.in_(['VALID', 'INVALID']),
+            CapturedEmail.updated_at >= ten_mins_ago
+        ).count()
+
     verified_emails = valid_emails + invalid_emails
     emails_pct = round((verified_emails / total_emails * 100) if total_emails > 0 else 0, 1)
-    
-    recent_verified_emails = session.query(CapturedEmail).filter(
-        CapturedEmail.verification_status.in_(['VALID', 'INVALID']),
-        CapturedEmail.updated_at >= ten_mins_ago
-    ).count()
     emails_speed = round(recent_verified_emails / 10.0, 1)
     remaining_emails_to_verify = total_emails - verified_emails
     emails_time_remaining_mins = round(remaining_emails_to_verify / emails_speed) if emails_speed > 0 else -1
@@ -92,7 +124,7 @@ def dashboard():
 
     return render_template('dashboard.html', 
                            total_journals=total_journals, active_journals=active_journals, inactive_journals=inactive_journals,
-                           
+                           journals=journals, selected_journal_id=journal_id,
                            total_editions=total_editions, completed_editions=completed_editions, 
                            editions_pct=editions_pct, editions_speed=editions_speed,
                            editions_time_remaining=format_time(editions_time_remaining_mins),

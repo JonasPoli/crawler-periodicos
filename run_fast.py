@@ -76,6 +76,7 @@ def run_discovery_phase(journal_id=None):
         pbar.update(1)
     
     pbar.close()
+    db_manager.close()
     print("--- DISCOVERY FINISHED ---")
 
 def monitor_progress(stop_event, journal_id=None):
@@ -140,6 +141,8 @@ def monitor_progress(stop_event, journal_id=None):
                 pbar_verify.n = v_completed
                 pbar_verify.total = v_completed + v_pending
                 pbar_verify.refresh()
+
+                session.commit()
 
             except Exception:
                 pass
@@ -258,7 +261,7 @@ def main():
         epilog="To STOP the process, use Ctrl+C in the terminal. If stuck, run 'pkill -f run_fast.py'"
     )
     parser.add_argument('mode', choices=['discover', 'crawl', 'process', 'verify', 'reset', 'all', 'super'], help="Mode of operation")
-    parser.add_argument('--workers', type=int, default=4, help="Number of parallel workers per phase")
+    parser.add_argument('--workers', type=int, default=2, help="Number of parallel workers per phase")
     parser.add_argument('--id', type=int, default=None, help="Specific Journal ID to process")
     
     args = parser.parse_args()
@@ -326,14 +329,44 @@ def main():
         monitor_thread.start()
 
         try:
-            # Main thread: wait until all worker processes finish naturally
+            # Main thread: wait until all worker processes finish naturally or queues are empty
+            db_checker = DBManager()
+            empty_streak = 0
             while True:
                 alive = [p for p in processes if p.is_alive()]
                 if not alive:
                     print("\nAll workers finished.")
                     stop_event.set()
                     break
+                
+                session = db_checker.session
+                article_base = session.query(Article).join(Edition).join(Journal)
+                email_base = session.query(CapturedEmail).join(Article).join(Edition).join(Journal)
+                edition_base = session.query(Edition).join(Journal)
+                
+                if args.id:
+                    article_base = article_base.filter(Journal.id == args.id)
+                    email_base = email_base.filter(Journal.id == args.id)
+                    edition_base = edition_base.filter(Journal.id == args.id)
+                
+                pending_editions = edition_base.filter(Edition.status.in_(['found', 'processing'])).count()
+                pending_crawl = article_base.filter(Article.status.in_(['found', 'processing_crawling'])).count()
+                pending_proc = article_base.filter(Article.status.in_(['downloaded', 'processing_extraction'])).count()
+                pending_verify = email_base.filter(CapturedEmail.verification_status.in_(['PENDING', 'PROCESSING'])).count()
+                
+                if pending_editions == 0 and pending_crawl == 0 and pending_proc == 0 and pending_verify == 0:
+                    empty_streak += 1
+                else:
+                    empty_streak = 0
+                
+                if empty_streak >= 8:
+                    print("\nAll queues are empty. Stopping workers...")
+                    stop_event.set()
+                    break
+                
+                session.commit()
                 time.sleep(2)
+            db_checker.close()
 
         except KeyboardInterrupt:
             print("\nStopping SUPER PROCESS...")

@@ -122,3 +122,10 @@ Tabelas chaves: `journals`, `editions`, `articles`, `files`, `captured_emails`.
 ## Só uma revista:
 Para rodar apenas para a revista de id=1
 venv/bin/python3 run_fast.py super --workers 4 --id 1
+
+
+
+
+
+venv/bin/python run_fast.py super --id 127 && venv/bin/python run_fast.py super --id 128 && venv/bin/python run_fast.py super --id 26
+

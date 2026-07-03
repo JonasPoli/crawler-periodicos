@@ -1,10 +1,21 @@
 import os
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, DateTime, Boolean, UniqueConstraint
+from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, DateTime, Boolean, UniqueConstraint, event
 from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy.engine import Engine
+
+@event.listens_for(Engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA busy_timeout=60000")
+    cursor.close()
+
 
 # Define database file path
-DB_FILE = "crawler.db"
+DB_DIR = os.path.dirname(os.path.abspath(__file__))
+DB_FILE = os.path.join(DB_DIR, "crawler.db")
 DATABASE_URL = f"sqlite:///{DB_FILE}"
 
 Base = declarative_base()
@@ -257,12 +268,12 @@ class CapturedEmail(Base):
 
 
 def init_db():
-    engine = create_engine(DATABASE_URL, connect_args={'timeout': 30})
+    engine = create_engine(DATABASE_URL, connect_args={'timeout': 60})
     Base.metadata.create_all(engine)
     return engine
 
 def get_session(engine=None):
     if engine is None:
-        engine = create_engine(DATABASE_URL, connect_args={'timeout': 30})
+        engine = create_engine(DATABASE_URL, connect_args={'timeout': 60})
     Session = sessionmaker(bind=engine)
     return Session()

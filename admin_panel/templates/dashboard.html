@@ -142,10 +142,17 @@
 </style>
 
 <div class="d-flex justify-content-between align-items-center dashboard-header">
-    <h2 class="mb-0"><i class="fas fa-chart-pie me-2"></i> Dashboard Geral</h2>
-    <div>
-        <span class="badge bg-secondary p-2"><i class="fas fa-book me-1"></i> Periódicos: <strong>{{ total_journals
-                }}</strong> ({{ active_journals }} ativos)</span>
+    <h2 class="mb-0"><i class="fas fa-chart-pie me-2"></i> Dashboard</h2>
+    <div class="d-flex align-items-center gap-3">
+        <form method="GET" action="/" class="d-flex align-items-center">
+            <select name="journal_id" class="form-select form-select-sm" onchange="this.form.submit()" style="width: auto; min-width: 250px;">
+                <option value="">-- Todos os Periódicos --</option>
+                {% for j in journals %}
+                <option value="{{ j.id }}" {% if selected_journal_id == j.id %}selected{% endif %}>{{ j.name }}</option>
+                {% endfor %}
+            </select>
+        </form>
+        <span class="badge bg-secondary p-2"><i class="fas fa-book me-1"></i> Periódicos: <strong>{{ total_journals }}</strong> ({{ active_journals }} ativos)</span>
     </div>
 </div>
 

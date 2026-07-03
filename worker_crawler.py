@@ -95,7 +95,8 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                         db_manager.mark_edition_completed(edition.id)
                     except:
                         db_manager.session.rollback()
-
+                
+                time.sleep(0.5)
                 continue # Loop again to prefer Editions until exhausted
 
             # PRIORITY 2: Process Pending Articles (Download PDF)
@@ -180,6 +181,7 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                     except:
                         db_manager.session.rollback()
                 
+                time.sleep(0.5)
                 continue
 
             # No work found

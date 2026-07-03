@@ -94,6 +94,9 @@ def run_processor_worker(worker_id, stop_event=None, journal_id=None):
                 article.lock_time = None
                 db_manager.session.commit()
                 
+                # Cooldown sleep for CPU
+                time.sleep(1.0)
+                
             except Exception as e:
                 log(worker_id, f"ERROR processing {article.id}: {e}")
                 try:
@@ -102,6 +105,9 @@ def run_processor_worker(worker_id, stop_event=None, journal_id=None):
                     db_manager.session.commit()
                 except:
                     db_manager.session.rollback()
+                
+                # Cooldown sleep on exception too
+                time.sleep(1.0)
 
     except KeyboardInterrupt:
         log(worker_id, "Stopping...")

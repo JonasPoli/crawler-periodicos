@@ -32,7 +32,8 @@ class OJSCrawler:
             return None
 
     def get_all_issues(self):
-        archive_url = f"{self.base_url}/issue/archive"
+        base_url_clean = self.base_url.rstrip('/')
+        archive_url = f"{base_url_clean}/issue/archive"
         print(f"Fetching archive: {archive_url}")
         soup = self.get_soup(archive_url)
         if not soup:

@@ -156,10 +156,18 @@ def run_verifier_worker(worker_id, stop_event=None, journal_id=None):
                 email_record.worker_id = None
                 email_record.lock_time = None
                 db_manager.session.commit()
+                
+                # Cooldown sleep
+                time.sleep(0.5)
             
             except Exception as e:
                 log(worker_id, f"ERROR verifying {email_addr}: {e}")
-                db_manager.session.rollback()
+                try:
+                    db_manager.session.rollback()
+                except:
+                    pass
+                # Cooldown sleep on error
+                time.sleep(0.5)
 
     except KeyboardInterrupt:
         log(worker_id, "Stopping...")
