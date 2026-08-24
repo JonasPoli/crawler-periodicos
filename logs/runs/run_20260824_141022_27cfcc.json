@@ -1,0 +1,33 @@
+{
+  "run_id": "run_20260824_141022_27cfcc",
+  "mode": "test_super",
+  "journal_id": 129,
+  "status": "completed",
+  "workers": 2,
+  "start_time": "2026-08-24T14:10:22.151830",
+  "end_time": "2026-08-24T14:10:25.786229",
+  "duration_seconds": 3,
+  "duration_formatted": "0m 3s",
+  "editions_processed": 354,
+  "articles_crawled": 596,
+  "pdfs_downloaded": 331,
+  "emails_extracted_distinct": 1241,
+  "emails_valid": 810,
+  "emails_invalid": 328,
+  "speed_articles_per_min": "6620.0",
+  "speed_emails_per_min": "24820.0",
+  "recovered_crashes": 3,
+  "error_count": 2,
+  "recent_errors": [
+    {
+      "type": "HTTP404NotFound",
+      "phase": "crawling",
+      "msg": "Article 999 PDF returned 404"
+    },
+    {
+      "type": "SMTPTimeout",
+      "phase": "verification",
+      "msg": "Host smtp.example.com timed out"
+    }
+  ]
+}

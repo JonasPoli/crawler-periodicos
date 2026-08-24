@@ -8,9 +8,10 @@ from bs4 import BeautifulSoup
 import time
 from urllib.parse import urljoin, urlparse
 from metadata_manager import MetadataManager
+from user_agents import get_headers, create_configured_session
 
 class OJSCrawler:
-    def __init__(self, base_url, journal_name, download_dir='downloads_ojs', metadata_manager=None, db_manager=None, force=False):
+    def __init__(self, base_url, journal_name, download_dir='downloads_ojs', metadata_manager=None, db_manager=None, force=False, agent_type='rotate'):
         self.raw_url = base_url.strip()
         self.base_url = self._normalize_base_url(self.raw_url)
         self.journal_name = journal_name
@@ -18,18 +19,12 @@ class OJSCrawler:
         self.metadata_manager = metadata_manager
         self.db_manager = db_manager
         self.force = force
+        self.agent_type = agent_type
         
         if not os.path.exists(download_dir):
             os.makedirs(download_dir, exist_ok=True)
             
-        self.session = requests.Session()
-        retries = Retry(total=3, backoff_factor=0.3, status_forcelist=[502, 503, 504])
-        adapter = HTTPAdapter(max_retries=retries, pool_connections=20, pool_maxsize=20)
-        self.session.mount('http://', adapter)
-        self.session.mount('https://', adapter)
-        self.session.headers.update({
-             'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        })
+        self.session = create_configured_session(agent_type=self.agent_type, pool_size=20)
 
     def _normalize_base_url(self, url):
         """Clean journal base URL by removing /issue/archive, /issue/current, trailing slashes."""
@@ -40,6 +35,8 @@ class OJSCrawler:
 
     def get_soup(self, url):
         try:
+            if self.agent_type == 'rotate':
+                self.session.headers.update(get_headers('rotate'))
             response = self.session.get(url, timeout=12)
             response.raise_for_status()
             return BeautifulSoup(response.content, 'html.parser')
@@ -242,6 +239,8 @@ class OJSCrawler:
             return local_path
             
         try:
+            if self.agent_type == 'rotate':
+                self.session.headers.update(get_headers('rotate'))
             with self.session.get(pdf_url, stream=True, timeout=30) as r:
                 r.raise_for_status()
                 with open(local_path, 'wb') as f:

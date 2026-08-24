@@ -267,6 +267,59 @@ class CapturedEmail(Base):
         return f"<CapturedEmail(email={self.email}, status={self.verification_status})>"
 
 
+class ExecutionRun(Base):
+    __tablename__ = 'execution_runs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String(64), unique=True, index=True, nullable=False)
+    mode = Column(String(50), default='super')
+    journal_id = Column(Integer, nullable=True)
+    status = Column(String(50), default='running') # 'running', 'completed', 'interrupted', 'crashed'
+    workers_count = Column(Integer, default=2)
+    start_time = Column(DateTime, default=datetime.datetime.utcnow)
+    end_time = Column(DateTime, nullable=True)
+    duration_seconds = Column(Integer, default=0)
+    
+    # Progress & Metrics
+    editions_processed = Column(Integer, default=0)
+    articles_crawled = Column(Integer, default=0)
+    pdfs_downloaded = Column(Integer, default=0)
+    pdfs_failed = Column(Integer, default=0)
+    emails_extracted = Column(Integer, default=0)
+    emails_valid = Column(Integer, default=0)
+    emails_invalid = Column(Integer, default=0)
+    
+    # Speeds
+    speed_articles_per_min = Column(String(50), default='0')
+    speed_pdfs_per_min = Column(String(50), default='0')
+    speed_emails_per_min = Column(String(50), default='0')
+    
+    # Crash / Recovery info
+    crash_recovered_tasks = Column(Integer, default=0)
+    system_info = Column(Text, nullable=True)
+    notes = Column(Text, nullable=True)
+
+    def __repr__(self):
+        return f"<ExecutionRun(run_id={self.run_id}, status={self.status}, duration={self.duration_seconds}s)>"
+
+
+class ErrorLog(Base):
+    __tablename__ = 'error_logs'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    run_id = Column(String(64), index=True, nullable=True)
+    phase = Column(String(50), nullable=False) # 'crawling', 'extraction', 'verification', 'system'
+    journal_id = Column(Integer, nullable=True)
+    article_id = Column(Integer, nullable=True)
+    error_type = Column(String(100), nullable=False) # e.g. 'HTTPError', 'PDFExtractionError', 'SMTPTimeout', 'CrashRecovery'
+    message = Column(Text, nullable=False)
+    details = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+    def __repr__(self):
+        return f"<ErrorLog(type={self.error_type}, phase={self.phase})>"
+
+
 def init_db():
     engine = create_engine(DATABASE_URL, connect_args={'timeout': 60})
     Base.metadata.create_all(engine)

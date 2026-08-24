@@ -8,7 +8,7 @@ import io
 # Add parent directory to path to import database modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from database import get_session, Journal, Article, File, CapturedEmail, Author, Edition
+from database import get_session, Journal, Article, File, CapturedEmail, Author, Edition, ExecutionRun, ErrorLog
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Change this in production
@@ -719,6 +719,30 @@ def report_emails_general():
                            page=page, total=total, per_page=per_page,
                            # Pass filters back to template
                            f_journal_id=journal_id, f_domain=domain, f_email_like=email_like, f_status=status)
+
+# --- TELEMETRY & RUNS ---
+
+@app.route('/runs')
+def list_runs_view():
+    session = get_db()
+    runs = session.query(ExecutionRun).order_by(ExecutionRun.start_time.desc()).limit(50).all()
+    
+    total_runs = session.query(ExecutionRun).count()
+    completed_runs = session.query(ExecutionRun).filter(ExecutionRun.status == 'completed').count()
+    crashed_runs = session.query(ExecutionRun).filter(ExecutionRun.status == 'crashed').count()
+    total_recovered = session.query(func.sum(ExecutionRun.crash_recovered_tasks)).scalar() or 0
+    
+    recent_errors = session.query(ErrorLog).order_by(ErrorLog.created_at.desc()).limit(20).all()
+    
+    return render_template(
+        'list_runs.html',
+        runs=runs,
+        total_runs=total_runs,
+        completed_runs=completed_runs,
+        crashed_runs=crashed_runs,
+        total_recovered=total_recovered,
+        recent_errors=recent_errors
+    )
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)

@@ -7,6 +7,7 @@ from db_manager import DBManager
 from metadata_manager import MetadataManager
 from scielo_crawler import SciELOCrawler
 from ojs_crawler import OJSCrawler
+from telemetry import TelemetryManager
 
 import logging
 
@@ -23,8 +24,8 @@ logging.basicConfig(
 def log(worker_id, message, level=logging.INFO):
     logging.log(level, f"[Worker {worker_id}] {message}")
 
-def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
-    log(worker_id, "Started.")
+def run_crawler_worker(worker_id, stop_event=None, journal_id=None, agent_type='rotate'):
+    log(worker_id, f"Started with agent mode: '{agent_type}'.")
     
     db_manager = DBManager()
     metadata_manager = MetadataManager(db_manager=db_manager)
@@ -59,10 +60,10 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                     if not crawler:
                         if journal.source_type == 'scielo':
                             crawler = SciELOCrawler(journal.url, journal.name, download_dir='downloads_scielo', 
-                                                  db_manager=db_manager)
+                                                  db_manager=db_manager, agent_type=agent_type)
                         elif journal.source_type == 'ojs':
                             crawler = OJSCrawler(journal.url, journal.name, download_dir='downloads_ojs', 
-                                               db_manager=db_manager)
+                                               db_manager=db_manager, agent_type=agent_type)
                         else:
                             log(worker_id, f"ERROR: Unknown source type {journal.source_type}")
                             db_manager.mark_edition_completed(edition.id) 
@@ -133,10 +134,10 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                     if not crawler:
                         if journal.source_type == 'scielo':
                             crawler = SciELOCrawler(journal.url, journal.name, download_dir='downloads_scielo', 
-                                                  db_manager=db_manager)
+                                                  db_manager=db_manager, agent_type=agent_type)
                         elif journal.source_type == 'ojs':
                             crawler = OJSCrawler(journal.url, journal.name, download_dir='downloads_ojs', 
-                                               db_manager=db_manager)
+                                               db_manager=db_manager, agent_type=agent_type)
                         else:
                             continue
                         crawlers[crawler_key] = crawler
@@ -170,6 +171,7 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                                 log(worker_id, f"DOWNLOADED: Article {article.id} ({duration:.2f}s) - {filename}")
                             else:
                                 log(worker_id, f"FAILED DOWNLOAD: {article.url} ({duration:.2f}s)")
+                                TelemetryManager.record_error(None, 'crawling', 'DownloadFailed', f"Failed to download PDF for Article {article.id}", details=pdf_url, journal_id=journal.id, article_id=article.id)
                                 article.status = 'error_download'
                                 article.worker_id = None
                                 db_manager.session.commit()
@@ -180,12 +182,14 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                             db_manager.session.commit()
                     else:
                         log(worker_id, f"NO METADATA: {article.url}")
+                        TelemetryManager.record_error(None, 'crawling', 'MetadataFailed', f"Failed to fetch metadata for Article {article.id}", details=article.url, journal_id=journal.id, article_id=article.id)
                         article.status = 'error_metadata'
                         article.worker_id = None
                         db_manager.session.commit()
 
                 except Exception as e:
                     log(worker_id, f"ERROR processing article {article.id}: {e}")
+                    TelemetryManager.record_error(None, 'crawling', 'ArticleException', str(e), details=article.url if article else None, article_id=article.id if article else None)
                     try:
                         article.worker_id = None
                         article.status = 'error_exception'

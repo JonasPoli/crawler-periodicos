@@ -1,0 +1,154 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h1 class="h2"><i class="fas fa-microchip me-2 text-primary"></i> Telemetria, Benchmarks & Execuções</h1>
+    <div class="btn-toolbar mb-2 mb-md-0">
+        <a href="{{ url_for('list_runs_view') }}" class="btn btn-sm btn-outline-secondary">
+            <i class="fas fa-sync-alt me-1"></i> Atualizar
+        </a>
+    </div>
+</div>
+
+<!-- KPI Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <div class="card text-white bg-primary mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Total de Execuções</h6>
+                <h2 class="card-text fw-bold">{{ total_runs }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-success mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Concluídas com Sucesso</h6>
+                <h2 class="card-text fw-bold">{{ completed_runs }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-danger mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Crashes / Forçados</h6>
+                <h2 class="card-text fw-bold">{{ crashed_runs }}</h2>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card text-white bg-warning mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Tarefas Auto-Recuperadas</h6>
+                <h2 class="card-text fw-bold">{{ total_recovered }}</h2>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Runs Table -->
+<div class="card shadow-sm mb-4">
+    <div class="card-header bg-light">
+        <h5 class="card-title mb-0"><i class="fas fa-history me-2"></i> Histórico de Execuções</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover table-striped mb-0 align-middle">
+                <thead class="table-dark">
+                    <tr>
+                        <th>Run ID</th>
+                        <th>Início (UTC)</th>
+                        <th>Modo</th>
+                        <th>Periódico</th>
+                        <th>Status</th>
+                        <th>Duração</th>
+                        <th>Throughput (Art/m)</th>
+                        <th>Throughput (Email/m)</th>
+                        <th>E-mails Válidos</th>
+                        <th>Erros</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for run in runs %}
+                    <tr>
+                        <td><code>{{ run.run_id }}</code></td>
+                        <td>{{ run.start_time.strftime('%d/%m/%Y %H:%M:%S') if run.start_time else '-' }}</td>
+                        <td><span class="badge bg-secondary">{{ run.mode }}</span></td>
+                        <td>{{ run.journal_id if run.journal_id else 'Todos' }}</td>
+                        <td>
+                            {% if run.status == 'completed' %}
+                            <span class="badge bg-success">COMPLETED</span>
+                            {% elif run.status == 'running' %}
+                            <span class="badge bg-warning text-dark">RUNNING</span>
+                            {% elif run.status == 'crashed' %}
+                            <span class="badge bg-danger">CRASHED</span>
+                            {% else %}
+                            <span class="badge bg-secondary">{{ run.status|upper }}</span>
+                            {% endif %}
+                        </td>
+                        <td>{{ (run.duration_seconds // 60) }}m {{ (run.duration_seconds % 60) }}s</td>
+                        <td><strong>{{ run.speed_articles_per_min }}</strong> / min</td>
+                        <td><strong>{{ run.speed_emails_per_min }}</strong> / min</td>
+                        <td>
+                            <span class="text-success fw-bold">{{ run.emails_valid }}</span> / {{ run.emails_extracted }}
+                        </td>
+                        <td>
+                            {% if run.crash_recovered_tasks > 0 %}
+                            <span class="badge bg-warning text-dark me-1" title="Tarefas recuperadas de crash">
+                                <i class="fas fa-undo"></i> {{ run.crash_recovered_tasks }} rec
+                            </span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="10" class="text-center py-4 text-muted">
+                            Nenhuma execução registrada ainda. Inicie o crawler para coletar métricas.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- Recent Errors Section -->
+<div class="card shadow-sm">
+    <div class="card-header bg-light">
+        <h5 class="card-title mb-0"><i class="fas fa-exclamation-triangle me-2 text-danger"></i> Últimos Erros & Ocorrências Registradas</h5>
+    </div>
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-secondary">
+                    <tr>
+                        <th>Data/Hora</th>
+                        <th>Fase</th>
+                        <th>Tipo de Erro</th>
+                        <th>Mensagem</th>
+                        <th>Detalhes</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for err in recent_errors %}
+                    <tr>
+                        <td style="white-space: nowrap;">{{ err.created_at.strftime('%d/%m %H:%M:%S') if err.created_at else '-' }}</td>
+                        <td><span class="badge bg-info text-dark">{{ err.phase|upper }}</span></td>
+                        <td><span class="badge bg-danger">{{ err.error_type }}</span></td>
+                        <td>{{ err.message }}</td>
+                        <td><small class="text-muted text-break">{{ err.details[:120] if err.details else '-' }}</small></td>
+                    </tr>
+                    {% else %}
+                    <tr>
+                        <td colspan="5" class="text-center py-3 text-muted">
+                            Nenhum erro crítico registrado no histórico.
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

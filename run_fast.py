@@ -11,8 +11,8 @@ from worker_verifier import run_verifier_worker
 from database import Journal, Article, Edition, CapturedEmail
 from tqdm import tqdm
 
-def run_discovery_phase(journal_id=None):
-    print("--- STARTING DISCOVERY PHASE ---")
+def run_discovery_phase(journal_id=None, agent_type='rotate'):
+    print(f"--- STARTING DISCOVERY PHASE (Agent: {agent_type}) ---")
     db_manager = DBManager()
     
     query = db_manager.session.query(Journal).filter_by(active=True)
@@ -26,21 +26,18 @@ def run_discovery_phase(journal_id=None):
     from scielo_crawler import SciELOCrawler
     from metadata_manager import MetadataManager
     
-    # metadata_manager = MetadataManager(db_manager=db_manager)
-    
     # Progress bar for journals
     pbar = tqdm(total=len(journals), desc="Discovery (Journals)", unit="journal")
     
     for journal in journals:
-        # print(f"Discovering {journal.name} ({journal.source_type})...")
         pbar.set_postfix_str(f"Current: {journal.name[:20]}...")
         
         try:
             crawler = None
             if journal.source_type == 'scielo':
-                crawler = SciELOCrawler(journal.url, journal.name, db_manager=db_manager)
+                crawler = SciELOCrawler(journal.url, journal.name, db_manager=db_manager, agent_type=agent_type)
             elif journal.source_type == 'ojs':
-                crawler = OJSCrawler(journal.url, journal.name, db_manager=db_manager)
+                crawler = OJSCrawler(journal.url, journal.name, db_manager=db_manager, agent_type=agent_type)
             else:
                 pbar.update(1)
                 continue
@@ -157,14 +154,13 @@ def monitor_progress(stop_event, journal_id=None):
         pbar_verify.close()
         db_manager.close()
 
-def reprocess_zero_email_journals(workers, journal_id=None):
+def reprocess_zero_email_journals(workers, journal_id=None, agent_type='rotate'):
     """
     Detect journals that ended with zero captured emails and run the
     full pipeline again for them.
     """
     db_manager = DBManager()
     if journal_id:
-        # Check if the specific journal ended with zero emails
         subq = db_manager.session.query(CapturedEmail.article_id).distinct()
         has_emails = db_manager.session.query(Article).join(Edition).filter(
             Edition.journal_id == journal_id,
@@ -183,7 +179,7 @@ def reprocess_zero_email_journals(workers, journal_id=None):
         db_manager.close()
         return
 
-    print(f"Re-processing {len(zero_email_journals)} journal(s) with zero emails.")
+    print(f"Re-processing {len(zero_email_journals)} journal(s) with zero emails (Agent: {agent_type}).")
     import logging
     os.makedirs('logs', exist_ok=True)
     logging.basicConfig(
@@ -201,14 +197,14 @@ def reprocess_zero_email_journals(workers, journal_id=None):
     db_manager.close()
 
     # Run discovery only for the selected journal(s)
-    run_discovery_phase(journal_id)
+    run_discovery_phase(journal_id, agent_type=agent_type)
 
     # Run the workers again
     stop_event = multiprocessing.Event()
     processes = []
     
     for i in range(workers):
-        p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-Rep-{i+1}", stop_event, journal_id))
+        p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-Rep-{i+1}", stop_event, journal_id, agent_type))
         p.start()
         processes.append(p)
         
@@ -231,15 +227,18 @@ def reprocess_zero_email_journals(workers, journal_id=None):
             p.join()
         print("Re-process done.")
 
-def run_parallel_workers(target_func, num_workers=4, label="Worker", journal_id=None):
+def run_parallel_workers(target_func, num_workers=4, label="Worker", journal_id=None, agent_type='rotate'):
     processes = []
     stop_event = multiprocessing.Event()
     
-    print(f"Starting {num_workers} {label}s... Press Ctrl+C to stop.")
+    print(f"Starting {num_workers} {label}s (Agent: {agent_type})... Press Ctrl+C to stop.")
     
     for i in range(num_workers):
         worker_id = f"{label}-{i+1}"
-        p = multiprocessing.Process(target=target_func, args=(worker_id, stop_event, journal_id))
+        if label == "Crawler":
+            p = multiprocessing.Process(target=target_func, args=(worker_id, stop_event, journal_id, agent_type))
+        else:
+            p = multiprocessing.Process(target=target_func, args=(worker_id, stop_event, journal_id))
         p.start()
         processes.append(p)
     
@@ -262,6 +261,8 @@ def run_parallel_workers(target_func, num_workers=4, label="Worker", journal_id=
             p.join()
         print("Stopped.")
 
+from telemetry import TelemetryManager
+
 def main():
     parser = argparse.ArgumentParser(
         description="Fast Parallel Crawler", 
@@ -270,6 +271,7 @@ def main():
     parser.add_argument('mode', choices=['discover', 'crawl', 'process', 'verify', 'reset', 'all', 'super'], help="Mode of operation")
     parser.add_argument('--workers', type=int, default=2, help="Number of parallel workers per phase")
     parser.add_argument('--id', type=int, default=None, help="Specific Journal ID to process")
+    parser.add_argument('--agent', choices=['rotate', 'chrome', 'googlebot', 'gptbot', 'bingbot', 'firefox', 'safari'], default='rotate', help="User-Agent profile to emulate")
     
     args = parser.parse_args()
     
@@ -277,13 +279,14 @@ def main():
     
     if args.mode == 'reset':
         print(f"Resetting stuck tasks for journal {args.id if args.id else 'ALL'}...")
-        db_manager.reset_stuck_tasks(timeout_minutes=0, journal_id=args.id)
+        recovered = db_manager.reset_stuck_tasks(timeout_minutes=0, journal_id=args.id)
+        print(f"Reset completed. Recovered {recovered} tasks.")
         
     elif args.mode == 'discover':
-        run_discovery_phase(args.id)
+        run_discovery_phase(args.id, agent_type=args.agent)
         
     elif args.mode == 'crawl':
-        run_parallel_workers(run_crawler_worker, args.workers, "Crawler", args.id)
+        run_parallel_workers(run_crawler_worker, args.workers, "Crawler", args.id, agent_type=args.agent)
         
     elif args.mode == 'process':
         run_parallel_workers(run_processor_worker, args.workers, "Processor", args.id)
@@ -294,21 +297,31 @@ def main():
     elif args.mode == 'super':
         # 0. Crash Recovery / Auto-Reset stuck tasks from previous crashed runs
         print("Auto-recovering any stuck tasks from previous runs...")
-        db_manager.reset_stuck_tasks(timeout_minutes=0, journal_id=args.id)
+        recovered_count = db_manager.reset_stuck_tasks(timeout_minutes=0, journal_id=args.id)
         
-        print("Starting SUPER PROCESS (All workers parallel)...")
+        # Start Telemetry Tracking
+        run_id = TelemetryManager.start_run(
+            mode=f"super ({args.agent})", 
+            journal_id=args.id, 
+            workers=args.workers, 
+            recovered_tasks=recovered_count
+        )
+        print(f"Telemetry tracking active: [{run_id}]")
+        
+        print(f"Starting SUPER PROCESS (All workers parallel | Agent: {args.agent})...")
         print("To STOP: Press Ctrl+C or run 'pkill -f run_fast.py'")
         
         stop_event = multiprocessing.Event()
         processes = []
+        final_status = 'completed'
         
         # 1. Discovery
-        run_discovery_phase(args.id)
+        run_discovery_phase(args.id, agent_type=args.agent)
         
         # 2. Start Workers
         # Crawlers
         for i in range(args.workers):
-            p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-{i+1}", stop_event, args.id))
+            p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-{i+1}", stop_event, args.id, args.agent))
             p.start()
             processes.append(p)
             
@@ -337,6 +350,7 @@ def main():
             # Main thread: wait until all worker processes finish naturally or queues are empty
             db_checker = DBManager()
             empty_streak = 0
+            checkpoint_counter = 0
             while True:
                 alive = [p for p in processes if p.is_alive()]
                 if not alive:
@@ -364,6 +378,12 @@ def main():
                 else:
                     empty_streak = 0
                 
+                # Checkpoint telemetry every 10s
+                checkpoint_counter += 1
+                if checkpoint_counter >= 5:
+                    TelemetryManager.checkpoint(run_id, journal_id=args.id)
+                    checkpoint_counter = 0
+
                 if empty_streak >= 5:
                     print("\nAll queues are empty. Stopping workers...")
                     stop_event.set()
@@ -375,19 +395,29 @@ def main():
 
         except KeyboardInterrupt:
             print("\nStopping SUPER PROCESS...")
+            final_status = 'interrupted'
             stop_event.set()
-
-        # Wait for workers and monitor thread
-        for p in processes:
-            p.join()
-        monitor_thread.join(timeout=5)
-        print("Done.")
+        except Exception as e:
+            final_status = 'crashed'
+            TelemetryManager.record_error(run_id, 'system', type(e).__name__, str(e))
+            stop_event.set()
+        finally:
+            # Wait for workers and monitor thread
+            for p in processes:
+                p.join()
+            monitor_thread.join(timeout=5)
+            
+            # Finalize Telemetry Report
+            summary = TelemetryManager.finish_run(run_id, status=final_status, journal_id=args.id)
+            if summary:
+                print(f"\n📊 [TELEMETRIA] Relatório salvo em logs/runs/{run_id}.md")
+            print("Done.")
 
         # Phase 2: Re-process journals with zero emails
         all_ok = all(p.exitcode == 0 for p in processes)
-        if all_ok:
+        if all_ok and final_status == 'completed':
             print("\n--- Phase 2: RE-VERIFY ZERO-EMAIL JOURNALS ---")
-            reprocess_zero_email_journals(args.workers, journal_id=args.id)
+            reprocess_zero_email_journals(args.workers, journal_id=args.id, agent_type=args.agent)
 
 
 if __name__ == "__main__":
