@@ -1,0 +1,22 @@
+{
+  "run_id": "run_20260824_163857_36e3ed",
+  "mode": "super (rotate)",
+  "journal_id": 129,
+  "status": "completed",
+  "workers": 20,
+  "start_time": "2026-08-24T16:38:57.606322",
+  "end_time": "2026-08-24T17:11:58.723769",
+  "duration_seconds": 1981,
+  "duration_formatted": "33m 1s",
+  "editions_processed": 2499,
+  "articles_crawled": 4460,
+  "pdfs_downloaded": 2704,
+  "emails_extracted_distinct": 4582,
+  "emails_valid": 2601,
+  "emails_invalid": 1959,
+  "speed_articles_per_min": "81.9",
+  "speed_emails_per_min": "138.8",
+  "recovered_crashes": 36,
+  "error_count": 0,
+  "recent_errors": []
+}

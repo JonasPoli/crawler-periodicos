@@ -43,17 +43,17 @@ def dashboard():
     # --- Editions Stats (Crawling Phase) ---
     if journal_id:
         total_editions = session.query(Edition).filter(Edition.journal_id == journal_id).count()
-        completed_editions = session.query(Edition).filter(Edition.journal_id == journal_id, Edition.status == 'completed').count()
+        completed_editions = session.query(Edition).filter(Edition.journal_id == journal_id, Edition.status.in_(['completed', 'completed_foreign'])).count()
         recent_completed_editions = session.query(Edition).filter(
             Edition.journal_id == journal_id,
-            Edition.status == 'completed',
+            Edition.status.in_(['completed', 'completed_foreign']),
             Edition.updated_at >= ten_mins_ago
         ).count()
     else:
         total_editions = session.query(Edition).count()
-        completed_editions = session.query(Edition).filter(Edition.status == 'completed').count()
+        completed_editions = session.query(Edition).filter(Edition.status.in_(['completed', 'completed_foreign'])).count()
         recent_completed_editions = session.query(Edition).filter(
-            Edition.status == 'completed',
+            Edition.status.in_(['completed', 'completed_foreign']),
             Edition.updated_at >= ten_mins_ago
         ).count()
 
@@ -65,14 +65,14 @@ def dashboard():
     # --- Articles Stats (Processing Phase) ---
     if journal_id:
         total_articles = session.query(Article).join(Edition).filter(Edition.journal_id == journal_id).count()
-        completed_articles = session.query(Article).join(Edition).filter(Edition.journal_id == journal_id, Article.status == 'completed').count()
+        completed_articles = session.query(Article).join(Edition).filter(Edition.journal_id == journal_id, Article.status.in_(['completed', 'completed_foreign', 'no_pdf'])).count()
         recent_files_created = session.query(File).join(Article).join(Edition).filter(
             Edition.journal_id == journal_id,
             File.created_at >= ten_mins_ago
         ).count()
     else:
         total_articles = session.query(Article).count()
-        completed_articles = session.query(Article).filter(Article.status == 'completed').count()
+        completed_articles = session.query(Article).filter(Article.status.in_(['completed', 'completed_foreign', 'no_pdf'])).count()
         recent_files_created = session.query(File).filter(
             File.created_at >= ten_mins_ago
         ).count()
@@ -742,6 +742,233 @@ def list_runs_view():
         crashed_runs=crashed_runs,
         total_recovered=total_recovered,
         recent_errors=recent_errors
+    )
+
+# --- HIERARCHICAL TREE EXPLORER (Revista -> Edição -> Artigo -> E-mails) ---
+
+@app.route('/explorer')
+def explorer_view():
+    from urllib.parse import urlparse
+    from collections import defaultdict
+    session = get_db()
+    journals = session.query(Journal).order_by(Journal.name).all()
+    journal_id = request.args.get('journal_id', type=int)
+    
+    if not journal_id and journals:
+        j129 = next((j for j in journals if j.id == 129), None)
+        journal_id = j129.id if j129 else journals[0].id
+        
+    selected_journal = session.query(Journal).get(journal_id) if journal_id else None
+    
+    # Default to legitimate for focused clean view
+    status_filter = request.args.get('status', 'legitimate')
+    search_query = request.args.get('q', '').strip()
+    page = request.args.get('page', 1, type=int)
+    per_page = 100
+    
+    tree_data = None
+    stats = None
+    
+    if selected_journal:
+        base_host = urlparse(selected_journal.url).netloc.lower() if selected_journal.url else ''
+        
+        # 1. Fast Batch KPI Stats
+        total_editions = session.query(Edition).filter(Edition.journal_id == selected_journal.id).count()
+        completed_editions = session.query(Edition).filter(Edition.journal_id == selected_journal.id, Edition.status.in_(['completed', 'completed_foreign'])).count()
+        pending_editions = max(0, total_editions - completed_editions)
+        
+        # Top KPIs - Canonical editions vs Aliases
+        canon_eds_subq = session.query(Edition.id).filter(
+            Edition.journal_id == selected_journal.id,
+            (Edition.is_canonical == True) | (Edition.is_canonical.is_(None))
+        )
+        total_editions = canon_eds_subq.count()
+        total_aliases = session.query(Edition).filter(
+            Edition.journal_id == selected_journal.id,
+            Edition.is_canonical == False
+        ).count()
+        
+        completed_editions = session.query(Edition).filter(
+            Edition.id.in_(canon_eds_subq),
+            Edition.status.in_(['completed', 'completed_foreign'])
+        ).count()
+        pending_editions = max(0, total_editions - completed_editions)
+        
+        # Article subquery
+        art_subq = session.query(Article.id).join(Edition).filter(Edition.journal_id == selected_journal.id)
+        
+        total_articles = session.query(Article).filter(Article.id.in_(art_subq)).count()
+        completed_articles = session.query(Article).filter(Article.id.in_(art_subq), Article.status.in_(['completed', 'completed_foreign'])).count()
+        no_pdf_articles = session.query(Article).filter(Article.id.in_(art_subq), Article.status == 'no_pdf').count()
+        error_articles = session.query(Article).filter(Article.id.in_(art_subq), Article.status.like('%error%')).count()
+        pending_articles = max(0, total_articles - (completed_articles + no_pdf_articles + error_articles))
+        
+        # Email stats
+        email_counts = session.query(
+            CapturedEmail.verification_status,
+            func.count(func.distinct(CapturedEmail.email))
+        ).filter(CapturedEmail.article_id.in_(art_subq)).group_by(CapturedEmail.verification_status).all()
+        
+        email_map = dict(email_counts)
+        valid_emails = email_map.get('VALID', 0)
+        invalid_emails = email_map.get('INVALID', 0)
+        pending_emails = email_map.get('PENDING', 0) + email_map.get('PROCESSING', 0)
+        total_emails = valid_emails + invalid_emails + pending_emails
+        
+        stats = {
+            'total_editions': total_editions,
+            'total_aliases': total_aliases,
+            'completed_editions': completed_editions,
+            'pending_editions': pending_editions,
+            'editions_pct': round((completed_editions / total_editions * 100) if total_editions > 0 else 0, 1),
+            
+            'total_articles': total_articles,
+            'completed_articles': completed_articles,
+            'no_pdf_articles': no_pdf_articles,
+            'error_articles': error_articles,
+            'pending_articles': pending_articles,
+            'articles_pct': round(((completed_articles + no_pdf_articles) / total_articles * 100) if total_articles > 0 else 0, 1),
+            
+            'total_emails': total_emails,
+            'valid_emails': valid_emails,
+            'invalid_emails': invalid_emails,
+            'pending_emails': pending_emails,
+            'emails_pct': round((valid_emails / total_emails * 100) if total_emails > 0 else 0, 1)
+        }
+        
+        # 2. Paginated Editions Query
+        show_aliases = request.args.get('show_aliases', '0') == '1'
+        with_articles = request.args.get('with_articles', '1')
+        
+        ed_query = session.query(Edition).filter(Edition.journal_id == selected_journal.id)
+        
+        if not show_aliases:
+            # Show only canonical editions by default
+            ed_query = ed_query.filter((Edition.is_canonical == True) | (Edition.is_canonical.is_(None)))
+            
+        if with_articles == '1':
+            # Show editions that actually contain articles
+            has_art_subq = session.query(Article.edition_id).distinct()
+            ed_query = ed_query.filter(Edition.id.in_(has_art_subq))
+            
+        if status_filter == 'legitimate':
+            ed_query = ed_query.filter(
+                Edition.url.like(f'%{base_host}%'),
+                (Edition.url.like('%/issue/view/%') | Edition.url.like('%/toc%') | Edition.url.like('%/grid%'))
+            )
+        elif status_filter == 'pending':
+            ed_query = ed_query.filter(Edition.status.in_(['found', 'processing']))
+        elif status_filter == 'completed':
+            ed_query = ed_query.filter(Edition.status.in_(['completed', 'completed_foreign']))
+            
+        if search_query:
+            # Find editions that match, OR contain articles matching title/url, OR contain emails matching, OR have aliases matching
+            matched_ed_by_art = session.query(Article.edition_id).filter(
+                (Article.title.ilike(f'%{search_query}%')) |
+                (Article.url.ilike(f'%{search_query}%'))
+            )
+            matched_ed_by_email = session.query(Article.edition_id).join(CapturedEmail).filter(
+                CapturedEmail.email.ilike(f'%{search_query}%')
+            )
+            matched_ed_by_alias = session.query(Edition.canonical_edition_id).filter(
+                (Edition.title.ilike(f'%{search_query}%')) |
+                (Edition.url.ilike(f'%{search_query}%')) |
+                (Edition.alias_notes.ilike(f'%{search_query}%'))
+            )
+            ed_query = ed_query.filter(
+                (Edition.title.ilike(f'%{search_query}%')) |
+                (Edition.url.ilike(f'%{search_query}%')) |
+                (Edition.id.in_(matched_ed_by_art)) |
+                (Edition.id.in_(matched_ed_by_email)) |
+                (Edition.id.in_(matched_ed_by_alias))
+            )
+            
+        total_ed_filtered = ed_query.count()
+        editions = ed_query.order_by(Edition.id.desc()).limit(per_page).offset((page - 1) * per_page).all()
+        
+        # 3. Bulk Fetch in 3 Queries (Fastest execution)
+        edition_ids = [e.id for e in editions]
+        
+        if edition_ids:
+            all_articles = session.query(Article).filter(Article.edition_id.in_(edition_ids)).order_by(Article.id.asc()).all()
+            article_ids = [a.id for a in all_articles]
+            
+            # Map articles by edition_id
+            articles_by_edition = defaultdict(list)
+            for a in all_articles:
+                articles_by_edition[a.edition_id].append(a)
+                
+            # Fetch emails & files in bulk
+            emails_by_article = defaultdict(list)
+            if article_ids:
+                all_emails = session.query(CapturedEmail).filter(CapturedEmail.article_id.in_(article_ids)).order_by(CapturedEmail.id.asc()).all()
+                for em in all_emails:
+                    emails_by_article[em.article_id].append(em)
+                    
+            files_by_article = defaultdict(list)
+            if article_ids:
+                all_files = session.query(File).filter(File.article_id.in_(article_ids)).all()
+                for f in all_files:
+                    files_by_article[f.article_id].append(f)
+                    
+            # Fetch aliases for canonical editions
+            aliases_by_canon = defaultdict(list)
+            all_aliases = session.query(Edition).filter(Edition.canonical_edition_id.in_(edition_ids)).all()
+            for al in all_aliases:
+                aliases_by_canon[al.canonical_edition_id].append(al)
+                    
+            tree_editions = []
+            for ed in editions:
+                ed_arts = []
+                for art in articles_by_edition.get(ed.id, []):
+                    art_emails = emails_by_article.get(art.id, [])
+                    art_files = files_by_article.get(art.id, [])
+                    ed_arts.append({
+                        'article': art,
+                        'emails': art_emails,
+                        'files': art_files,
+                        'email_count': len(art_emails),
+                        'valid_email_count': sum(1 for e in art_emails if e.verification_status == 'VALID')
+                    })
+                    
+                ed_host = urlparse(ed.url).netloc.lower() if ed.url else ''
+                is_foreign = bool(base_host and ed_host and (ed_host != base_host))
+                ed_aliases = aliases_by_canon.get(ed.id, [])
+                
+                tree_editions.append({
+                    'edition': ed,
+                    'domain': ed_host,
+                    'is_foreign': is_foreign,
+                    'aliases': ed_aliases,
+                    'alias_count': len(ed_aliases),
+                    'articles': ed_arts,
+                    'article_count': len(ed_arts),
+                    'completed_count': sum(1 for a in ed_arts if a['article'].status in ['completed', 'completed_foreign', 'no_pdf']),
+                    'total_emails': sum(a['email_count'] for a in ed_arts),
+                    'valid_emails': sum(a['valid_email_count'] for a in ed_arts)
+                })
+        else:
+            tree_editions = []
+            
+        tree_data = {
+            'editions': tree_editions,
+            'total_editions_filtered': total_ed_filtered,
+            'page': page,
+            'per_page': per_page,
+            'total_pages': (total_ed_filtered + per_page - 1) // per_page if total_ed_filtered > 0 else 1
+        }
+        
+    return render_template(
+        'explorer.html',
+        journals=journals,
+        selected_journal=selected_journal,
+        selected_journal_id=journal_id,
+        stats=stats,
+        tree_data=tree_data,
+        status_filter=status_filter,
+        with_articles=with_articles,
+        show_aliases=show_aliases,
+        search_query=search_query
     )
 
 if __name__ == '__main__':

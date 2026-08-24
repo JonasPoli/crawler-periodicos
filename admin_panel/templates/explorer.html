@@ -1,0 +1,597 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* Modern Explorer & Tree Styling */
+    .explorer-header {
+        margin-bottom: 1.5rem;
+    }
+    
+    .stats-overview {
+        background: #ffffff;
+        border-radius: 12px;
+        box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
+        padding: 1.25rem;
+        margin-bottom: 1.5rem;
+        border-left: 5px solid #0d6efd;
+    }
+
+    .kpi-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 0.9rem;
+        text-align: center;
+        border: 1px solid #e9ecef;
+        transition: transform 0.15s ease;
+    }
+    .kpi-card:hover {
+        transform: translateY(-2px);
+    }
+    .kpi-val {
+        font-size: 1.7rem;
+        font-weight: 800;
+        line-height: 1.1;
+    }
+    .kpi-lbl {
+        font-size: 0.75rem;
+        text-transform: uppercase;
+        color: #6c757d;
+        font-weight: 600;
+        letter-spacing: 0.5px;
+    }
+
+    /* Accordion Level 1 (Editions) */
+    .accordion-edition {
+        margin-bottom: 0.85rem;
+        border: 1px solid #dee2e6;
+        border-radius: 10px !important;
+        overflow: hidden;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.03);
+    }
+    .accordion-edition .accordion-button {
+        background-color: #f8fafc;
+        font-weight: 700;
+        color: #1e293b;
+        padding: 1rem 1.25rem;
+        font-size: 1rem;
+    }
+    .accordion-edition .accordion-button:not(.collapsed) {
+        background-color: #eff6ff;
+        color: #1d4ed8;
+        box-shadow: none;
+    }
+
+    /* Accordion Level 2 (Articles) */
+    .accordion-article {
+        margin-bottom: 0.6rem;
+        border: 1px solid #e2e8f0;
+        border-radius: 8px !important;
+        overflow: hidden;
+    }
+    .accordion-article .accordion-button {
+        background-color: #ffffff;
+        font-size: 0.92rem;
+        font-weight: 600;
+        color: #334155;
+        padding: 0.75rem 1rem;
+    }
+    .accordion-article .accordion-button:not(.collapsed) {
+        background-color: #f1f5f9;
+        color: #0f172a;
+        box-shadow: none;
+    }
+
+    /* Level 3 (Emails Table/Cards) */
+    .email-item {
+        background: #ffffff;
+        border: 1px solid #e2e8f0;
+        border-radius: 6px;
+        padding: 0.6rem 0.85rem;
+        margin-bottom: 0.4rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        transition: background 0.15s;
+    }
+    .email-item:hover {
+        background: #f8fafc;
+    }
+
+    .badge-status {
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.35em 0.65em;
+        border-radius: 6px;
+    }
+
+    .toolbar-actions .btn {
+        font-size: 0.85rem;
+        font-weight: 600;
+        border-radius: 6px;
+    }
+
+    .search-box {
+        position: relative;
+    }
+    .search-box i {
+        position: absolute;
+        left: 12px;
+        top: 10px;
+        color: #94a3b8;
+    }
+    .search-box input {
+        padding-left: 36px;
+        border-radius: 8px;
+    }
+
+    .tree-meta {
+        font-size: 0.82rem;
+        color: #64748b;
+    }
+</style>
+
+<div class="explorer-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <div>
+        <h2 class="mb-0 fw-bold"><i class="fas fa-sitemap text-primary me-2"></i> Explorador em Árvore</h2>
+        <p class="text-muted small mb-0">Visão hierárquica e controle de sanfona: <strong>Revista ➔ Edições ➔ Documentos ➔ E-mails</strong></p>
+    </div>
+    
+    <div class="d-flex align-items-center gap-2">
+        <form method="GET" action="{{ url_for('explorer_view') }}" class="d-flex align-items-center gap-2">
+            <select name="journal_id" class="form-select form-select-sm" onchange="this.form.submit()" style="min-width: 280px; font-weight: 600;">
+                {% for j in journals %}
+                <option value="{{ j.id }}" {% if selected_journal_id == j.id %}selected{% endif %}>
+                    #{{ j.id }} - {{ j.name }}
+                </option>
+                {% endfor %}
+            </select>
+        </form>
+    </div>
+</div>
+
+{% if selected_journal and stats %}
+<!-- RELATÓRIO DO QUE FOI FEITO E DO QUE FALTA (SUPERIOR) -->
+<div class="stats-overview">
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div>
+            <h5 class="fw-bold mb-1 text-dark">
+                <i class="fas fa-book-open text-primary me-2"></i>{{ selected_journal.name }}
+            </h5>
+            <div class="tree-meta">
+                <a href="{{ selected_journal.url }}" target="_blank" class="text-decoration-none text-secondary me-3">
+                    <i class="fas fa-external-link-alt me-1"></i> {{ selected_journal.url }}
+                </a>
+                <span class="badge {% if selected_journal.status == 'completed' %}bg-success{% else %}bg-primary{% endif %}">
+                    {{ selected_journal.status|upper }}
+                </span>
+            </div>
+        </div>
+        
+        <!-- Barra de Conclusão Global -->
+        <div style="min-width: 220px;" class="text-end">
+            <div class="small fw-bold text-muted mb-1">Status Geral: {{ stats.articles_pct }}% Concluído</div>
+            <div class="progress" style="height: 10px; border-radius: 10px;">
+                <div class="progress-bar {% if stats.articles_pct == 100 %}bg-success{% else %}bg-primary progress-bar-striped progress-bar-animated{% endif %}" 
+                     role="progressbar" style="width: {{ stats.articles_pct }}%"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KPIs: O QUE FOI FEITO vs O QUE FALTA -->
+    <div class="row g-2">
+        <!-- Edições -->
+        <div class="col-md-4">
+            <div class="kpi-card">
+                <div class="kpi-lbl text-primary mb-1"><i class="fas fa-layer-group me-1"></i> Fase 1: Edições Canônicas</div>
+                <div class="kpi-val text-dark">{{ stats.total_editions }}</div>
+                <div class="d-flex justify-content-center gap-2 mt-1 small">
+                    <span class="text-success fw-bold"><i class="fas fa-check-circle"></i> {{ stats.completed_editions }} Concluídas</span>
+                    {% if stats.total_aliases > 0 %}
+                    <span class="text-muted">|</span>
+                    <span class="text-muted" title="Links de edições redundantes mapeados como espelhos/aliases">+ {{ stats.total_aliases }} aliases</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Artigos / PDFs -->
+        <div class="col-md-4">
+            <div class="kpi-card">
+                <div class="kpi-lbl text-purple mb-1" style="color: #8e44ad;"><i class="fas fa-file-pdf me-1"></i> Fase 2: Artigos Reais</div>
+                <div class="kpi-val text-dark">{{ stats.total_articles }}</div>
+                <div class="d-flex justify-content-center gap-2 mt-1 small">
+                    <span class="text-success fw-bold"><i class="fas fa-check-circle"></i> {{ stats.completed_articles }} Baixados</span>
+                    <span class="text-muted">|</span>
+                    <span class="{% if stats.pending_articles > 0 %}text-danger fw-bold{% else %}text-muted{% endif %}">
+                        <i class="fas fa-hourglass-half"></i> {{ stats.pending_articles }} Faltam
+                    </span>
+                    {% if stats.no_pdf_articles > 0 %}
+                    <span class="text-muted" title="Templates ou sem PDF">({{ stats.no_pdf_articles }} s/ pdf)</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- E-mails -->
+        <div class="col-md-4">
+            <div class="kpi-card">
+                <div class="kpi-lbl text-success mb-1"><i class="fas fa-envelope-open-text me-1"></i> Fase 3: E-mails Capturados</div>
+                <div class="kpi-val text-dark">{{ stats.total_emails }}</div>
+                <div class="d-flex justify-content-center gap-2 mt-1 small">
+                    <span class="text-success fw-bold" title="SMTP/MX Verificado"><i class="fas fa-shield-alt"></i> {{ stats.valid_emails }} Válidos</span>
+                    <span class="text-muted">|</span>
+                    <span class="text-danger" title="Inválidos"><i class="fas fa-times-circle"></i> {{ stats.invalid_emails }} Invál.</span>
+                    {% if stats.pending_emails > 0 %}
+                    <span class="text-muted">|</span>
+                    <span class="text-warning fw-bold"><i class="fas fa-spinner fa-spin"></i> {{ stats.pending_emails }} Pend.</span>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- BARRA DE CONTROLE: SANFONA (EXPANDIR/RECOLHER TUDO) & FILTROS -->
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2 toolbar-actions">
+    <!-- Botões de Sanfona -->
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <button type="button" class="btn btn-primary" onclick="expandAll()">
+            <i class="fas fa-expand-alt me-1"></i> Expandir Tudo
+        </button>
+        <button type="button" class="btn btn-outline-secondary" onclick="collapseAll()">
+            <i class="fas fa-compress-alt me-1"></i> Recolher Tudo
+        </button>
+        <div class="btn-group">
+            <button type="button" class="btn btn-outline-primary" onclick="expandEditionsOnly()">
+                <i class="fas fa-folder-open me-1"></i> Só Edições
+            </button>
+            <button type="button" class="btn btn-outline-primary" onclick="expandArticlesOnly()">
+                <i class="fas fa-file-alt me-1"></i> Só Artigos
+            </button>
+        </div>
+    </div>
+
+    <!-- Campo de Busca em Tempo Real e Filtros -->
+    <div class="d-flex align-items-center gap-2 flex-wrap">
+        <div class="search-box">
+            <i class="fas fa-search"></i>
+            <input type="text" id="liveSearchInput" class="form-control form-control-sm" placeholder="Buscar edição, artigo ou e-mail..." onkeyup="filterTreeLive()">
+        </div>
+
+        <div class="btn-group">
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status=status_filter, with_articles=with_articles, show_aliases='1' if not show_aliases else '0', q=search_query) }}" class="btn btn-sm {% if show_aliases %}btn-warning text-dark fw-bold{% else %}btn-outline-secondary{% endif %}" title="Mostrar ou ocultar edições espelho/alias">
+                <i class="fas fa-link me-1"></i> {% if show_aliases %}Ocultar Aliases{% else %}Ver Aliases ({{ stats.total_aliases }}){% endif %}
+            </a>
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status=status_filter, with_articles='1', show_aliases='1' if show_aliases else '0', q=search_query) }}" class="btn btn-sm {% if with_articles == '1' %}btn-success{% else %}btn-outline-secondary{% endif %}" title="Exibir apenas edições que contêm artigos">
+                <i class="fas fa-check-circle me-1"></i> Com Documentos
+            </a>
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status=status_filter, with_articles='0', show_aliases='1' if show_aliases else '0', q=search_query) }}" class="btn btn-sm {% if with_articles == '0' %}btn-secondary{% else %}btn-outline-secondary{% endif %}" title="Exibir todas as edições cadastradas">
+                Todas as Edições
+            </a>
+        </div>
+
+        <div class="btn-group">
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status='all', with_articles=with_articles, show_aliases='1' if show_aliases else '0') }}" class="btn btn-sm {% if status_filter == 'all' %}btn-dark{% else %}btn-outline-dark{% endif %}">Todos</a>
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status='legitimate', with_articles=with_articles, show_aliases='1' if show_aliases else '0') }}" class="btn btn-sm {% if status_filter == 'legitimate' %}btn-dark{% else %}btn-outline-dark{% endif %}">Legítimos</a>
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status='completed', with_articles=with_articles, show_aliases='1' if show_aliases else '0') }}" class="btn btn-sm {% if status_filter == 'completed' %}btn-dark{% else %}btn-outline-dark{% endif %}">Concluídos</a>
+            <a href="{{ url_for('explorer_view', journal_id=selected_journal.id, status='pending', with_articles=with_articles, show_aliases='1' if show_aliases else '0') }}" class="btn btn-sm {% if status_filter == 'pending' %}btn-dark{% else %}btn-outline-dark{% endif %}">Pendentes</a>
+        </div>
+    </div>
+</div>
+
+<!-- HIERARQUIA SANFONA (ÁRVORE) -->
+<div id="treeContainer">
+    {% if tree_data and tree_data.editions %}
+        {% for ed_item in tree_data.editions %}
+        {% set ed = ed_item.edition %}
+        <div class="accordion accordion-edition tree-edition-node" id="accEdition_{{ ed.id }}">
+            <div class="accordion-item border-0">
+                <!-- CABEÇALHO DA EDIÇÃO (NÍVEL 1) -->
+                <h2 class="accordion-header" id="headingEd_{{ ed.id }}">
+                    <button class="accordion-button collapsed edition-toggle-btn" type="button" data-bs-toggle="collapse" data-bs-target="#collapseEd_{{ ed.id }}" aria-expanded="false">
+                        <div class="d-flex justify-content-between align-items-center w-100 me-3 flex-wrap gap-2">
+                            <div class="d-flex align-items-center gap-2 flex-wrap">
+                                <i class="fas fa-folder text-warning me-1"></i>
+                                <span class="edition-title">
+                                    {% if ed.title %}{{ ed.title }}{% else %}Edição #{{ ed.id }}{% endif %}
+                                </span>
+                                {% if ed_item.is_foreign %}
+                                <span class="badge bg-warning text-dark border"><i class="fas fa-external-link-alt me-1"></i> Externo ({{ ed_item.domain }})</span>
+                                {% endif %}
+                                {% if not ed.is_canonical %}
+                                <span class="badge bg-info text-dark border"><i class="fas fa-link me-1"></i> Alias / Espelho</span>
+                                {% endif %}
+                                {% if ed_item.alias_count > 0 %}
+                                <span class="badge bg-light text-secondary border" title="Esta edição possui links espelho no portal"><i class="fas fa-link me-1"></i> {{ ed_item.alias_count }} aliases</span>
+                                {% endif %}
+                                {% if ed.year %}<span class="badge bg-light text-dark border">Ano: {{ ed.year }}</span>{% endif %}
+                                {% if ed.volume %}<span class="badge bg-light text-dark border">Vol: {{ ed.volume }}</span>{% endif %}
+                                {% if ed.number %}<span class="badge bg-light text-dark border">Nº: {{ ed.number }}</span>{% endif %}
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2">
+                                <span class="badge bg-secondary badge-status">
+                                    <i class="fas fa-file-alt me-1"></i> {{ ed_item.article_count }} Artigos
+                                </span>
+                                {% if ed_item.total_emails > 0 %}
+                                <span class="badge bg-success badge-status">
+                                    <i class="fas fa-envelope me-1"></i> {{ ed_item.total_emails }} E-mails ({{ ed_item.valid_emails }} válidos)
+                                </span>
+                                {% endif %}
+                                <span class="badge {% if ed.status in ['completed', 'completed_foreign'] %}bg-success{% elif ed.status == 'processing' %}bg-warning text-dark{% else %}bg-secondary{% endif %} badge-status">
+                                    {{ ed.status }}
+                                </span>
+                            </div>
+                        </div>
+                    </button>
+                </h2>
+
+                <!-- CORPO DA EDIÇÃO (LISTA DE ARTIGOS) -->
+                <div id="collapseEd_{{ ed.id }}" class="accordion-collapse collapse edition-collapse-body" data-bs-parent="#treeContainer_DISABLED">
+                    <div class="accordion-body bg-light p-3">
+                        <div class="mb-2 d-flex justify-content-between align-items-center small text-muted flex-wrap gap-2">
+                            <span><i class="fas fa-link me-1"></i> URL Canônica: <a href="{{ ed.url }}" target="_blank" class="text-decoration-none text-muted">{{ ed.url }}</a></span>
+                            <span><strong>{{ ed_item.completed_count }}/{{ ed_item.article_count }}</strong> artigos processados</span>
+                        </div>
+
+                        {% if ed_item.aliases %}
+                        <div class="mb-3 p-2 bg-white rounded border small">
+                            <div class="fw-bold text-secondary mb-1">
+                                <i class="fas fa-sitemap text-warning me-1"></i> Links Redundantes / Aliases no Portal OJS mapeados para esta edição ({{ ed_item.alias_count }}):
+                            </div>
+                            <div class="d-flex flex-wrap gap-1">
+                                {% for al in ed_item.aliases %}
+                                <a href="{{ al.url }}" target="_blank" class="badge bg-light text-dark border text-decoration-none" title="{{ al.url }}">
+                                    <i class="fas fa-external-link-alt text-muted me-1"></i> {{ al.title }}
+                                </a>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% endif %}
+
+                        {% if ed_item.articles %}
+                            {% for art_item in ed_item.articles %}
+                            {% set art = art_item.article %}
+                            <!-- SANFONA DE ARTIGO (NÍVEL 2) -->
+                            <div class="accordion accordion-article tree-article-node" id="accArt_{{ art.id }}">
+                                <div class="accordion-item border-0">
+                                    <h2 class="accordion-header" id="headingArt_{{ art.id }}">
+                                        <button class="accordion-button collapsed article-toggle-btn" type="button" data-bs-toggle="collapse" data-bs-target="#collapseArt_{{ art.id }}" aria-expanded="false">
+                                            <div class="d-flex justify-content-between align-items-center w-100 me-2 flex-wrap gap-1">
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <i class="fas fa-file-lines text-primary me-1"></i>
+                                                    <span class="article-title-text" style="max-width: 650px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                                        {% if art.title and art.title != 'Unknown Title' %}{{ art.title }}{% else %}Artigo #{{ art.id }} (Sem título){% endif %}
+                                                    </span>
+                                                </div>
+
+                                                <div class="d-flex align-items-center gap-2">
+                                                    <!-- Badge E-mails -->
+                                                    {% if art_item.email_count > 0 %}
+                                                    <span class="badge bg-success badge-status">
+                                                        <i class="fas fa-envelope me-1"></i> {{ art_item.email_count }} E-mails ({{ art_item.valid_email_count }} válidos)
+                                                    </span>
+                                                    {% else %}
+                                                    <span class="badge bg-light text-muted border badge-status">0 e-mails</span>
+                                                    {% endif %}
+
+                                                    <!-- Badge Status Artigo -->
+                                                    <span class="badge {% if art.status in ['completed', 'completed_foreign'] %}bg-success{% elif art.status == 'no_pdf' %}bg-secondary{% elif art.status == 'processing_crawling' or art.status == 'processing_extraction' %}bg-warning text-dark{% elif 'error' in art.status %}bg-danger{% else %}bg-primary{% endif %} badge-status">
+                                                        {{ art.status }}
+                                                    </span>
+                                                </div>
+                                            </div>
+                                        </button>
+                                    </h2>
+
+                                    <!-- CORPO DO ARTIGO (E-MAILS E DETALHES) -->
+                                    <div id="collapseArt_{{ art.id }}" class="accordion-collapse collapse article-collapse-body">
+                                        <div class="accordion-body bg-white p-3">
+                                            <!-- Metadados do Artigo -->
+                                            <div class="row mb-3 pb-2 border-bottom g-2 small">
+                                                <div class="col-md-8">
+                                                    <div><strong><i class="fas fa-users me-1 text-secondary"></i> Autores:</strong> {% if art.authors %}{{ art.authors }}{% else %}<em class="text-muted">Não identificados</em>{% endif %}</div>
+                                                    <div class="mt-1">
+                                                        <strong><i class="fas fa-globe me-1 text-secondary"></i> Link Original:</strong> 
+                                                        <a href="{{ art.url }}" target="_blank" class="text-decoration-none">{{ art.url }}</a>
+                                                    </div>
+                                                </div>
+                                                <div class="col-md-4 text-md-end">
+                                                    {% if art_item.files %}
+                                                        {% for f in art_item.files %}
+                                                        <a href="{{ url_for('download_file', id=f.id) }}" class="btn btn-sm btn-outline-success">
+                                                            <i class="fas fa-file-pdf me-1"></i> Abrir PDF ({{ f.filename }})
+                                                        </a>
+                                                        {% endfor %}
+                                                    {% elif art.status == 'completed' %}
+                                                        <span class="badge bg-light text-success border"><i class="fas fa-check me-1"></i> PDF Processado</span>
+                                                    {% elif art.status == 'no_pdf' %}
+                                                        <span class="badge bg-light text-secondary border"><i class="fas fa-info-circle me-1"></i> Artigo sem PDF</span>
+                                                    {% endif %}
+                                                </div>
+                                            </div>
+
+                                            <!-- LISTA DE E-MAILS DO ARTIGO (NÍVEL 3) -->
+                                            <h6 class="fw-bold mb-2 text-dark small text-uppercase">
+                                                <i class="fas fa-at text-primary me-1"></i> E-mails Capturados neste Artigo ({{ art_item.email_count }})
+                                            </h6>
+
+                                            {% if art_item.emails %}
+                                                <div class="email-list-group">
+                                                    {% for email in art_item.emails %}
+                                                    <div class="email-item">
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            {% if email.verification_status == 'VALID' %}
+                                                                <i class="fas fa-shield-alt text-success fs-5" title="Válido (MX / SMTP Confirmado)"></i>
+                                                            {% elif email.verification_status == 'INVALID' %}
+                                                                <i class="fas fa-times-circle text-danger fs-5" title="Inválido"></i>
+                                                            {% else %}
+                                                                <i class="fas fa-clock text-warning fs-5" title="Pendente de verificação"></i>
+                                                            {% endif %}
+
+                                                            <div>
+                                                                <span class="fw-bold text-dark email-text">{{ email.email }}</span>
+                                                                {% if email.author %}
+                                                                <span class="text-muted small ms-2"><i class="fas fa-user me-1"></i>{{ email.author.name }}</span>
+                                                                {% endif %}
+                                                                {% if email.mx_server %}
+                                                                <span class="text-muted small ms-2 d-none d-md-inline"><i class="fas fa-server me-1"></i>{{ email.mx_server }}</span>
+                                                                {% endif %}
+                                                                {% if email.error_details and email.verification_status == 'INVALID' %}
+                                                                <span class="text-danger small ms-2">({{ email.error_details }})</span>
+                                                                {% endif %}
+                                                            </div>
+                                                        </div>
+
+                                                        <div class="d-flex align-items-center gap-2">
+                                                            <button type="button" class="btn btn-sm btn-light border py-0 px-2" title="Copiar e-mail" onclick="navigator.clipboard.writeText('{{ email.email }}'); this.innerText='Copiado!'; setTimeout(() => this.innerText='Copiar', 1500)">
+                                                                <i class="fas fa-copy"></i> Copiar
+                                                            </button>
+                                                            <span class="badge {% if email.verification_status == 'VALID' %}bg-success{% elif email.verification_status == 'INVALID' %}bg-danger{% else %}bg-warning text-dark{% endif %} badge-status">
+                                                                {{ email.verification_status }}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                    {% endfor %}
+                                                </div>
+                                            {% else %}
+                                                <div class="text-muted small py-2 bg-light rounded text-center">
+                                                    <i class="fas fa-info-circle me-1"></i> Nenhum e-mail capturado neste artigo.
+                                                </div>
+                                            {% endif %}
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        {% else %}
+                            <div class="text-muted small text-center py-3">Nenhum artigo cadastrado nesta edição.</div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+
+        <!-- Paginação -->
+        {% if tree_data.total_pages > 1 %}
+        <nav class="mt-4">
+            <ul class="pagination justify-content-center">
+                <li class="page-item {% if tree_data.page == 1 %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('explorer_view', journal_id=selected_journal.id, status=status_filter, with_articles=with_articles, page=tree_data.page - 1, q=search_query) }}">Anterior</a>
+                </li>
+                {% for p in range(1, tree_data.total_pages + 1) %}
+                    {% if p == 1 or p == tree_data.total_pages or (p >= tree_data.page - 2 and p <= tree_data.page + 2) %}
+                    <li class="page-item {% if p == tree_data.page %}active{% endif %}">
+                        <a class="page-link" href="{{ url_for('explorer_view', journal_id=selected_journal.id, status=status_filter, with_articles=with_articles, page=p, q=search_query) }}">{{ p }}</a>
+                    </li>
+                    {% elif p == 2 or p == tree_data.total_pages - 1 %}
+                    <li class="page-item disabled"><span class="page-link">...</span></li>
+                    {% endif %}
+                {% endfor %}
+                <li class="page-item {% if tree_data.page == tree_data.total_pages %}disabled{% endif %}">
+                    <a class="page-link" href="{{ url_for('explorer_view', journal_id=selected_journal.id, status=status_filter, with_articles=with_articles, page=tree_data.page + 1, q=search_query) }}">Próxima</a>
+                </li>
+            </ul>
+        </nav>
+        {% endif %}
+
+    {% else %}
+        <div class="alert alert-info text-center p-4">
+            <i class="fas fa-info-circle fa-2x mb-2 d-block"></i>
+            Nenhuma edição encontrada com os filtros selecionados para este periódico.
+        </div>
+    {% endif %}
+</div>
+
+{% endif %}
+
+<!-- SCRIPTS DE EXPANDIR/RECOLHER TUDO E LIVE SEARCH -->
+<script>
+    // 1. Expandir Todas as Sanfonas (Edições e Artigos)
+    function expandAll() {
+        document.querySelectorAll('.edition-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).show();
+        });
+        document.querySelectorAll('.article-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).show();
+        });
+        document.querySelectorAll('.edition-toggle-btn, .article-toggle-btn').forEach(btn => {
+            btn.classList.remove('collapsed');
+            btn.setAttribute('aria-expanded', 'true');
+        });
+    }
+
+    // 2. Recolher Todas as Sanfonas
+    function collapseAll() {
+        document.querySelectorAll('.edition-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).hide();
+        });
+        document.querySelectorAll('.article-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).hide();
+        });
+        document.querySelectorAll('.edition-toggle-btn, .article-toggle-btn').forEach(btn => {
+            btn.classList.add('collapsed');
+            btn.setAttribute('aria-expanded', 'false');
+        });
+    }
+
+    // 3. Expandir Apenas Edições
+    function expandEditionsOnly() {
+        document.querySelectorAll('.edition-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).show();
+        });
+        document.querySelectorAll('.article-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).hide();
+        });
+    }
+
+    // 4. Expandir Apenas Artigos (dentro de edições abertas)
+    function expandArticlesOnly() {
+        document.querySelectorAll('.article-collapse-body').forEach(el => {
+            new bootstrap.Collapse(el, { toggle: false }).show();
+        });
+    }
+
+    // 5. Busca em Tempo Real no DOM
+    function filterTreeLive() {
+        const query = document.getElementById('liveSearchInput').value.toLowerCase().trim();
+        const editions = document.querySelectorAll('.tree-edition-node');
+
+        if (!query) {
+            editions.forEach(ed => {
+                ed.style.display = '';
+                ed.querySelectorAll('.tree-article-node').forEach(art => art.style.display = '');
+            });
+            return;
+        }
+
+        editions.forEach(ed => {
+            let edMatches = false;
+            const edTitle = ed.querySelector('.accordion-header')?.innerText.toLowerCase() || '';
+            const articles = ed.querySelectorAll('.tree-article-node');
+
+            articles.forEach(art => {
+                const artTitle = art.querySelector('.article-title-text')?.innerText.toLowerCase() || '';
+                const emailTexts = Array.from(art.querySelectorAll('.email-text')).map(el => el.innerText.toLowerCase()).join(' ');
+
+                if (artTitle.includes(query) || emailTexts.includes(query) || edTitle.includes(query)) {
+                    art.style.display = '';
+                    edMatches = true;
+                } else {
+                    art.style.display = 'none';
+                }
+            });
+
+            if (edMatches || edTitle.includes(query)) {
+                ed.style.display = '';
+                // Auto-expand if matches query
+                const edCollapse = ed.querySelector('.edition-collapse-body');
+                if (edCollapse) new bootstrap.Collapse(edCollapse, { toggle: false }).show();
+            } else {
+                ed.style.display = 'none';
+            }
+        });
+    }
+</script>
+{% endblock %}

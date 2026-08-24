@@ -6,7 +6,7 @@ from requests.adapters import HTTPAdapter
 from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 import time
-from urllib.parse import urljoin
+from urllib.parse import urljoin, urlparse
 from metadata_manager import MetadataManager
 from user_agents import get_headers, create_configured_session
 
@@ -23,7 +23,7 @@ class SciELOCrawler:
         if not os.path.exists(download_dir):
             os.makedirs(download_dir, exist_ok=True)
             
-        self.session = create_configured_session(agent_type=self.agent_type, pool_size=20)
+        self.session = create_configured_session(agent_type=self.agent_type, pool_size=50)
 
     def get_soup(self, url):
         try:
@@ -41,19 +41,61 @@ class SciELOCrawler:
         if not soup:
             return []
 
-        issue_links = []
+        base_host = urlparse(self.base_url).netloc.lower()
+        issue_items = []
+        seen_urls = set()
         base_path = self.base_url.replace("https://www.scielo.br", "").replace("http://www.scielo.br", "")
         
         for a in soup.find_all('a', href=True):
             href = a['href'].strip()
             if '/i/' in href and (not base_path or base_path in href):
-                full_url = urljoin(self.base_url, href)
-                if full_url not in issue_links:
-                    issue_links.append(full_url)
-        
-        return list(set(issue_links))
+                full_url = urljoin(self.base_url, href).split('#')[0]
+                if urlparse(full_url).netloc.lower() == base_host and full_url not in seen_urls:
+                    seen_urls.add(full_url)
+                    
+                    title_text = a.get_text(' ', strip=True)
+                    # Parse year, volume, number from SciELO pattern e.g. /i/2021.v34n2/
+                    m = re.search(r'/i/(\d{4})\.?(?:v([0-9a-zA-Z]+))?\.?(?:n([0-9a-zA-Z\-]+)|(ahead|nahead|suppl\w*))?', href, re.I)
+                    year = m.group(1) if m else None
+                    vol = m.group(2) if m else None
+                    num = (m.group(3) or m.group(4)) if m else None
+                    
+                    if not title_text or title_text == 'v.' or len(title_text) < 2:
+                        parts = []
+                        if vol: parts.append(f"v. {vol}")
+                        if num: parts.append(f"n. {num}")
+                        if year: parts.append(f"({year})")
+                        title_text = " ".join(parts) if parts else (href.split('/i/')[-1].strip('/') or 'Edição SciELO')
 
-    def process_issue(self, issue_url):
+                    issue_items.append({
+                        'url': full_url,
+                        'title': title_text,
+                        'year': year,
+                        'volume': vol,
+                        'number': num
+                    })
+        
+        return issue_items
+
+    def get_issue_metadata(self, issue_url):
+        soup = self.get_soup(issue_url)
+        if not soup:
+            return {}
+        h1 = soup.find('h1') or soup.find('h2')
+        title_text = h1.get_text(' ', strip=True) if h1 else ''
+        m = re.search(r'/i/(\d{4})\.?(?:v([0-9a-zA-Z]+))?\.?(?:n([0-9a-zA-Z\-]+)|(ahead|nahead|suppl\w*))?', issue_url, re.I)
+        year = m.group(1) if m else None
+        vol = m.group(2) if m else None
+        num = (m.group(3) or m.group(4)) if m else None
+        return {
+            'title': title_text,
+            'year': year,
+            'volume': vol,
+            'number': num
+        }
+
+    def process_issue(self, issue_item):
+        issue_url = issue_item.get('url') if isinstance(issue_item, dict) else issue_item
         article_links = self.get_article_urls(issue_url)
         for art_url in article_links:
             if not self.force and self.db_manager and self.db_manager.is_article_completed(art_url):
@@ -65,12 +107,13 @@ class SciELOCrawler:
         if not soup:
             return []
 
+        base_host = urlparse(self.base_url).netloc.lower()
         article_links = []
         for a in soup.find_all('a', href=True):
             href = a['href'].strip()
             if '/a/' in href and 'format=pdf' not in href:
                 full_url = urljoin(issue_url, href).split('?')[0].split('#')[0]
-                if full_url not in article_links:
+                if urlparse(full_url).netloc.lower() == base_host and full_url not in article_links:
                     article_links.append(full_url)
         return article_links
 

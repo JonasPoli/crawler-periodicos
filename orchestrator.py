@@ -73,7 +73,17 @@ def main():
                 # Inner bar for Issues
                 issue_pbar = tqdm(issues, desc=f"Issues ({j_db.acronym or j_db.name[:10]})", unit="issue", leave=False, colour='cyan')
                 
-                for issue_url in issue_pbar:
+                for issue_item in issue_pbar:
+                    if isinstance(issue_item, dict):
+                        issue_url = issue_item.get('url')
+                        title = issue_item.get('title')
+                        vol = issue_item.get('volume')
+                        num = issue_item.get('number')
+                        yr = issue_item.get('year')
+                    else:
+                        issue_url = issue_item
+                        title = vol = num = yr = None
+
                     # check if issue is completed
                     if not force_mode and db_manager.is_edition_completed(issue_url):
                         # tqdm.write(f"Skipping completed issue: {issue_url}")
@@ -81,7 +91,14 @@ def main():
 
                     try:
                         crawler.process_issue(issue_url)
-                        edition = db_manager.get_or_create_edition(j_db.id, issue_url)
+                        edition = db_manager.get_or_create_edition(
+                            j_db.id, 
+                            issue_url,
+                            title=title,
+                            volume=vol,
+                            number=num,
+                            year=yr
+                        )
                         db_manager.mark_edition_completed(edition.id)
                         
                     except Exception as exc_issue:

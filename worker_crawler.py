@@ -72,6 +72,22 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None, agent_type='
 
                     # Discover Articles in this Edition
                     try:
+                        # If edition has no title or year, fetch metadata
+                        if hasattr(crawler, 'get_issue_metadata') and (not edition.title or edition.title == 'Unknown Title' or not edition.year):
+                            try:
+                                meta_ed = crawler.get_issue_metadata(edition.url)
+                                if meta_ed.get('title') and (not edition.title or edition.title == 'Unknown Title'):
+                                    edition.title = meta_ed['title']
+                                if meta_ed.get('year') and not edition.year:
+                                    edition.year = meta_ed['year']
+                                if meta_ed.get('volume') and not edition.volume:
+                                    edition.volume = meta_ed['volume']
+                                if meta_ed.get('number') and not edition.number:
+                                    edition.number = meta_ed['number']
+                                db_manager.session.commit()
+                            except Exception:
+                                pass
+
                         article_urls = crawler.get_article_urls(edition.url)
                         
                         duration = time.time() - start_time
@@ -148,6 +164,11 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None, agent_type='
                     meta = crawler.fetch_article_metadata(article.url)
                     
                     if meta:
+                        # Save any metadata emails discovered on the landing page immediately
+                        if meta.get('emails'):
+                            for em in meta['emails']:
+                                db_manager.add_captured_email(article.id, em)
+                                
                         pdf_url = meta.get('pdf_url')
                         filename = meta.get('pdf_filename')
                         

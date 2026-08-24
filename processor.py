@@ -80,43 +80,88 @@ class Processor:
              
         return text
 
-    def extract_emails(self, text):
-        # 1. Basic normalization
-        # Replace common obfuscations if they are clear
-        # (Be careful not to replace valid text, but " [at] " is usually an email)
-        text_norm = text.replace(' [at] ', '@').replace(' (at) ', '@').replace(' at ', '@')
-        
-        # 2. Extract potential emails
-        # Regex explanation:
-        # User part: [a-zA-Z0-9._%+-]+
-        # @ part: \s*@\s* (allows whitespace)
-        # Domain part: [a-zA-Z0-9.-]+
-        # Dot part: \s*\.\s* (allows whitespace)
-        # TLD: [a-zA-Z]{2,}
-        
-        # We need to capture them and then clean up spaces.
-        # Improved regex: prevents matching merged text like "brName" by enforcing TLD to be either all lower or all upper.
-        email_pattern = r'([a-zA-Z0-9._%+-]+)\s*@\s*([a-zA-Z0-9.-]+)\s*\.\s*([a-z]{2,}|[A-Z]{2,})\b'
-        
-        matches = re.findall(email_pattern, text_norm)
-        
+    def extract_annotations_from_pdf(self, pdf_path):
+        """Extract mailto hyperlinks embedded in PDF annotations (LaTeX, InDesign, Word links)."""
+        found_emails = []
+        try:
+            reader = PdfReader(pdf_path)
+            # Scan first 10 pages and last 5 pages
+            num_pages = len(reader.pages)
+            pages_to_check = self._get_pages_to_extract(num_pages)
+            for page_idx in pages_to_check:
+                page = reader.pages[page_idx]
+                if '/Annots' in page:
+                    annots = page['/Annots']
+                    for a in annots:
+                        try:
+                            obj = a.get_object() if hasattr(a, 'get_object') else a
+                            if isinstance(obj, dict):
+                                action = obj.get('/A')
+                                if action and isinstance(action, dict):
+                                    uri = str(action.get('/URI', ''))
+                                    if 'mailto:' in uri.lower():
+                                        clean = uri.lower().split('mailto:')[-1].split('?')[0].strip()
+                                        if '@' in clean:
+                                            found_emails.append(clean)
+                        except Exception:
+                            pass
+        except Exception:
+            pass
+        return list(set(found_emails))
+
+    def extract_emails(self, text, pdf_path=None):
+        """
+        Smart Academic Email Extractor:
+        1. De-obfuscates Portuguese & International anti-spam formatting (arroba, ponto, at, dot).
+        2. Expands grouped multi-author emails: {autor1, autor2}@usp.br -> autor1@usp.br, autor2@usp.br.
+        3. Repairs column margin hyphenation: user@faculdade-\nregional.edu.br -> user@faculdaderegional.edu.br.
+        4. Extracts hyperlinks and mailto annotations directly from PDF objects if pdf_path is provided.
+        """
         emails = []
-        for match in matches:
-            # Reconstruct without spaces
-            email = f"{match[0]}@{match[1]}.{match[2]}"
-            emails.append(email)
 
-        # 3. Also try searching in a "flattened" text to catch emails broken by newlines
-        # but be careful of merging separate words.
-        # simple check: if we didn't find many, maybe try joining lines?
-        # Actually, let's just always try the strict pattern on flattened text too.
-        flat_text = text_norm.replace('\n', '') # Remove all newlines
-        matches_flat = re.findall(email_pattern, flat_text)
-        for match in matches_flat:
-             email = f"{match[0]}@{match[1]}.{match[2]}"
-             emails.append(email)
+        # 1. Embedded PDF Link Annotations (if pdf_path provided)
+        if pdf_path and os.path.exists(pdf_path):
+            annot_emails = self.extract_annotations_from_pdf(pdf_path)
+            emails.extend(annot_emails)
 
-        return list(set(emails))
+        if not text:
+            return list(set(emails))
+
+        # 2. Multi-author bracket expansion: {u1, u2, u3}@domain.com or (u1, u2)@domain.com
+        multi_pattern = r'[\{\(]([a-zA-Z0-9._%+-]+(?:\s*,\s*[a-zA-Z0-9._%+-]+)+)[\}\)]\s*@\s*([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})'
+        for match in re.finditer(multi_pattern, text):
+            users_str, domain = match.group(1), match.group(2)
+            for user in re.split(r'[\s,]+', users_str):
+                user_clean = user.strip()
+                if user_clean and len(user_clean) >= 2:
+                    emails.append(f"{user_clean}@{domain.strip()}".lower())
+
+        # 3. De-obfuscation
+        t = text
+        t = re.sub(r'\s*(\[|\()?\s*(at|arroba)\s*(\]|\))?\s*', '@', t, flags=re.IGNORECASE)
+        t = re.sub(r'\s*(\[|\()?\s*(dot|ponto)\s*(\]|\))?\s*', '.', t, flags=re.IGNORECASE)
+        # Fix column hyphen linebreaks: "uni-\nversidade.br" -> "universidade.br"
+        t = re.sub(r'([a-zA-Z0-9])-\s*\n\s*([a-zA-Z0-9])', r'\1\2', t)
+
+        # 4. Standard and Flattened Email Regex
+        email_pattern = r'([a-zA-Z0-9._%+-]+)\s*@\s*([a-zA-Z0-9.-]+)\s*\.\s*([a-z]{2,}|[A-Z]{2,})\b'
+        for match in re.findall(email_pattern, t):
+            email = f"{match[0]}@{match[1]}.{match[2]}".lower().strip()
+            # Strip trailing punctuation
+            email = email.rstrip('.,;:/-_')
+            if len(email) >= 6 and '@' in email and '.' in email:
+                emails.append(email)
+
+        # 5. Flattened search for emails split across lines
+        flat_text = t.replace('\n', ' ')
+        for match in re.findall(email_pattern, flat_text):
+            email = f"{match[0]}@{match[1]}.{match[2]}".lower().strip()
+            email = email.rstrip('.,;:/-_')
+            if len(email) >= 6 and '@' in email and '.' in email:
+                emails.append(email)
+
+        # Deduplicate and return
+        return sorted(list(set(emails)))
 
     def process_all(self, metadata_manager=None):
         if not os.path.exists(self.download_dir):

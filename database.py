@@ -72,6 +72,11 @@ class Edition(Base):
     # Status: 'found', 'processing', 'completed', 'error'
     status = Column(String(50), default='found')
     
+    # Canonicalization and Alias support
+    canonical_edition_id = Column(Integer, ForeignKey('editions.id', ondelete='SET NULL'), nullable=True)
+    is_canonical = Column(Boolean, default=True, nullable=False)
+    alias_notes = Column(String(500), nullable=True)
+
     # Locking for parallel processing
     worker_id = Column(String(50), nullable=True)
     lock_time = Column(DateTime, nullable=True)
@@ -79,14 +84,13 @@ class Edition(Base):
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
 
-    # Constraint to avoid duplicates (adjust based on what makes an edition unique in practice)
-    # For now, relying on URL uniqueness per journal might be safest if available, 
-    # but URL might vary. Let's enforce unique URL for now.
+    # Constraint to avoid duplicates
     __table_args__ = (UniqueConstraint('url', name='uq_edition_url'),)
 
     # Relationships
     journal = relationship("Journal", back_populates="editions")
     articles = relationship("Article", back_populates="edition", cascade="all, delete-orphan")
+    canonical_edition = relationship("Edition", remote_side=[id], backref="aliases")
 
     def __repr__(self):
         return f"<Edition(journal_id={self.journal_id}, title={self.title})>"
@@ -323,6 +327,23 @@ class ErrorLog(Base):
 def init_db():
     engine = create_engine(DATABASE_URL, connect_args={'timeout': 60})
     Base.metadata.create_all(engine)
+    
+    # Auto-migration for SQLite columns
+    try:
+        with engine.connect() as conn:
+            # Check existing columns in editions table
+            result = conn.exec_driver_sql("PRAGMA table_info(editions)").fetchall()
+            col_names = [r[1] for r in result]
+            if 'canonical_edition_id' not in col_names:
+                conn.exec_driver_sql("ALTER TABLE editions ADD COLUMN canonical_edition_id INTEGER REFERENCES editions(id) ON DELETE SET NULL")
+            if 'is_canonical' not in col_names:
+                conn.exec_driver_sql("ALTER TABLE editions ADD COLUMN is_canonical BOOLEAN DEFAULT 1")
+            if 'alias_notes' not in col_names:
+                conn.exec_driver_sql("ALTER TABLE editions ADD COLUMN alias_notes VARCHAR(500)")
+            conn.commit()
+    except Exception as e:
+        pass
+        
     return engine
 
 def get_session(engine=None):

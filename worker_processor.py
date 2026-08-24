@@ -76,7 +76,7 @@ def run_processor_worker(worker_id, stop_event=None, journal_id=None):
                 # Extract
                 log(worker_id, f"STARTING EXTRACTION: Article {article.id} from {local_path}")
                 text = processor.extract_text_from_pdf(local_path)
-                emails = processor.extract_emails(text)
+                emails = processor.extract_emails(text, pdf_path=local_path)
                 
                 duration = time.time() - start_time
                 

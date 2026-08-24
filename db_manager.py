@@ -139,6 +139,25 @@ class DBManager:
             except IntegrityError:
                 self.session.rollback()
                 edition = self.session.query(Edition).filter_by(url=url).first()
+        else:
+            updated = False
+            if title and (not edition.title or edition.title == 'Unknown Title'):
+                edition.title = title
+                updated = True
+            if volume and not edition.volume:
+                edition.volume = volume
+                updated = True
+            if number and not edition.number:
+                edition.number = number
+                updated = True
+            if year and not edition.year:
+                edition.year = year
+                updated = True
+            if updated:
+                try:
+                    self.session.commit()
+                except Exception:
+                    self.session.rollback()
         return edition
 
     def mark_edition_completed(self, edition_id):
@@ -152,6 +171,63 @@ class DBManager:
     def is_edition_completed(self, url):
         edition = self.session.query(Edition).filter_by(url=url).first()
         return edition and edition.status == 'completed'
+
+    def consolidate_and_canonicalize_editions(self, journal_id=None):
+        """
+        Consolidates duplicate issues, detects and links mirror/alias URLs,
+        and cleans invalid edition records.
+        """
+        try:
+            query = self.session.query(Edition)
+            if journal_id:
+                query = query.filter(Edition.journal_id == journal_id)
+            
+            # 1. Clean any entries in editions that are article URLs (/article/view/)
+            fake_eds = query.filter(Edition.url.like('%/article/view/%')).all()
+            if fake_eds:
+                fake_ids = [e.id for e in fake_eds]
+                valid_issue = self.session.query(Edition).filter(
+                    Edition.journal_id == journal_id if journal_id else Edition.journal_id.isnot(None),
+                    Edition.url.like('%/issue/view/%')
+                ).first()
+                if valid_issue:
+                    self.session.query(Article).filter(Article.edition_id.in_(fake_ids)).update(
+                        {'edition_id': valid_issue.id}, synchronize_session=False
+                    )
+                self.session.query(Edition).filter(Edition.id.in_(fake_ids)).delete(synchronize_session=False)
+                self.session.commit()
+                
+            # 2. Canonicalize legitimate issue editions
+            issue_eds_query = self.session.query(Edition)
+            if journal_id:
+                issue_eds_query = issue_eds_query.filter(Edition.journal_id == journal_id)
+            issue_eds = issue_eds_query.filter(Edition.url.like('%/issue/view/%')).all()
+            
+            non_empty = [e for e in issue_eds if self.session.query(Article).filter(Article.edition_id == e.id).count() > 0]
+            empty_eds = [e for e in issue_eds if self.session.query(Article).filter(Article.edition_id == e.id).count() == 0]
+            
+            for c in non_empty:
+                c.is_canonical = True
+                c.canonical_edition_id = None
+                
+            if non_empty:
+                default_canon = non_empty[0]
+                for z in empty_eds:
+                    z.is_canonical = False
+                    matched = False
+                    for c in non_empty:
+                        if c.title and z.title and (c.title.strip().lower() == z.title.strip().lower()):
+                            z.canonical_edition_id = c.id
+                            z.alias_notes = f"Espelho OJS de {c.title}"
+                            matched = True
+                            break
+                    if not matched:
+                        z.canonical_edition_id = default_canon.id
+                        z.alias_notes = f"Espelho / Alias OJS de {default_canon.title}"
+                        
+            self.session.commit()
+        except Exception as e:
+            self.session.rollback()
 
     def get_next_pending_edition(self, worker_id, journal_id=None):
         """

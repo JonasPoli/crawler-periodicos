@@ -47,8 +47,25 @@ def run_discovery_phase(journal_id=None, agent_type='rotate'):
             try:
                 issues = crawler.get_all_issues()
                 
-                for issue_url in issues:
-                    edition = db_manager.get_or_create_edition(journal.id, issue_url)
+                for issue_item in issues:
+                    if isinstance(issue_item, dict):
+                        issue_url = issue_item.get('url')
+                        title = issue_item.get('title')
+                        vol = issue_item.get('volume')
+                        num = issue_item.get('number')
+                        yr = issue_item.get('year')
+                    else:
+                        issue_url = issue_item
+                        title = vol = num = yr = None
+
+                    edition = db_manager.get_or_create_edition(
+                        journal.id, 
+                        issue_url,
+                        title=title,
+                        volume=vol,
+                        number=num,
+                        year=yr
+                    )
                     
                     if db_manager.is_edition_completed(issue_url):
                         continue
@@ -394,6 +411,8 @@ def main():
 
                 if empty_streak >= 5:
                     print("\nAll queues are empty. Stopping workers...")
+                    if args.id:
+                        db_checker.mark_journal_completed(args.id)
                     stop_event.set()
                     break
                 
@@ -418,7 +437,8 @@ def main():
             # Finalize Telemetry Report
             summary = TelemetryManager.finish_run(run_id, status=final_status, journal_id=args.id)
             if summary:
-                print(f"\n📊 [TELEMETRIA] Relatório salvo em logs/runs/{run_id}.md")
+                print(f"\nReport generated: {summary.get('report_path')}")
+                print(f"Summary: {summary.get('speed_articles_per_min')} arts/min | {summary.get('emails_extracted')} emails extracted ({summary.get('emails_valid')} valid)")
             print("Done.")
 
         # Phase 2: Re-process journals with zero emails
