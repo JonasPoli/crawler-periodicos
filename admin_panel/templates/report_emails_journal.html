@@ -64,9 +64,13 @@
                             </span>
                         </td>
                         <td>
+                            {% if email.article %}
                             <a href="{{ url_for('edit_article', id=email.article.id) }}">
                                 {{ email.article.title[:50] }}...
                             </a>
+                            {% else %}
+                            -
+                            {% endif %}
                         </td>
                     </tr>
                     {% else %}

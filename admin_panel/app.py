@@ -85,33 +85,45 @@ def dashboard():
 
     # --- Emails Stats (Verification Phase) ---
     if journal_id:
-        total_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(Edition.journal_id == journal_id).count()
-        valid_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(
-            Edition.journal_id == journal_id,
-            CapturedEmail.verification_status == 'VALID'
-        ).count()
-        invalid_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(
-            Edition.journal_id == journal_id,
-            CapturedEmail.verification_status == 'INVALID'
-        ).count()
-        recent_verified_emails = session.query(CapturedEmail).join(Article).join(Edition).filter(
-            Edition.journal_id == journal_id,
-            CapturedEmail.verification_status.in_(['VALID', 'INVALID']),
-            CapturedEmail.updated_at >= ten_mins_ago
-        ).count()
+        total_emails = session.query(func.count(func.distinct(CapturedEmail.email)))\
+            .join(Article, CapturedEmail.article_id == Article.id)\
+            .join(Edition, Article.edition_id == Edition.id)\
+            .filter(Edition.journal_id == journal_id).scalar() or 0
+        valid_emails = session.query(func.count(func.distinct(CapturedEmail.email)))\
+            .join(Article, CapturedEmail.article_id == Article.id)\
+            .join(Edition, Article.edition_id == Edition.id)\
+            .filter(
+                Edition.journal_id == journal_id,
+                CapturedEmail.verification_status == 'VALID'
+            ).scalar() or 0
+        invalid_emails = session.query(func.count(func.distinct(CapturedEmail.email)))\
+            .join(Article, CapturedEmail.article_id == Article.id)\
+            .join(Edition, Article.edition_id == Edition.id)\
+            .filter(
+                Edition.journal_id == journal_id,
+                CapturedEmail.verification_status == 'INVALID'
+            ).scalar() or 0
+        recent_verified_emails = session.query(func.count(func.distinct(CapturedEmail.email)))\
+            .join(Article, CapturedEmail.article_id == Article.id)\
+            .join(Edition, Article.edition_id == Edition.id)\
+            .filter(
+                Edition.journal_id == journal_id,
+                CapturedEmail.verification_status.in_(['VALID', 'INVALID']),
+                CapturedEmail.updated_at >= ten_mins_ago
+            ).scalar() or 0
     else:
-        total_emails = session.query(CapturedEmail).count()
-        valid_emails = session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'VALID').count()
-        invalid_emails = session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'INVALID').count()
-        recent_verified_emails = session.query(CapturedEmail).filter(
+        total_emails = session.query(func.count(func.distinct(CapturedEmail.email))).scalar() or 0
+        valid_emails = session.query(func.count(func.distinct(CapturedEmail.email))).filter(CapturedEmail.verification_status == 'VALID').scalar() or 0
+        invalid_emails = session.query(func.count(func.distinct(CapturedEmail.email))).filter(CapturedEmail.verification_status == 'INVALID').scalar() or 0
+        recent_verified_emails = session.query(func.count(func.distinct(CapturedEmail.email))).filter(
             CapturedEmail.verification_status.in_(['VALID', 'INVALID']),
             CapturedEmail.updated_at >= ten_mins_ago
-        ).count()
+        ).scalar() or 0
 
-    verified_emails = valid_emails + invalid_emails
+    verified_emails = min(valid_emails + invalid_emails, total_emails)
     emails_pct = round((verified_emails / total_emails * 100) if total_emails > 0 else 0, 1)
     emails_speed = round(recent_verified_emails / 10.0, 1)
-    remaining_emails_to_verify = total_emails - verified_emails
+    remaining_emails_to_verify = max(0, total_emails - verified_emails)
     emails_time_remaining_mins = round(remaining_emails_to_verify / emails_speed) if emails_speed > 0 else -1
     
     # Helper to format time
@@ -199,7 +211,7 @@ def list_journals():
         if journal_ids:
             counts = session.query(
                 Journal.id,
-                func.count(CapturedEmail.id)
+                func.count(func.distinct(CapturedEmail.email))
             ).outerjoin(Edition, Edition.journal_id == Journal.id)\
              .outerjoin(Article, Article.edition_id == Edition.id)\
              .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
@@ -238,7 +250,7 @@ def list_journals():
         journal_ids = [j.id for j in journals]
         counts = session.query(
             Journal.id,
-            func.count(CapturedEmail.id)
+            func.count(func.distinct(CapturedEmail.email))
         ).outerjoin(Edition, Edition.journal_id == Journal.id)\
          .outerjoin(Article, Article.edition_id == Edition.id)\
          .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
@@ -536,11 +548,15 @@ def report_emails_by_journal():
     
     if journal_id:
         selected_journal = session.query(Journal).get(journal_id)
-        query = session.query(CapturedEmail).join(Article).join(Edition).filter(Edition.journal_id == journal_id)
+        query = session.query(CapturedEmail)\
+            .join(Article, CapturedEmail.article_id == Article.id)\
+            .join(Edition, Article.edition_id == Edition.id)\
+            .filter(Edition.journal_id == journal_id)
         
         if status_filter:
             query = query.filter(CapturedEmail.verification_status == status_filter)
             
+        query = query.group_by(CapturedEmail.email).order_by(CapturedEmail.email.asc())
         emails = query.all()
         
         if export == 'csv':
@@ -548,7 +564,9 @@ def report_emails_by_journal():
             cw = csv.writer(si)
             cw.writerow(['ID', 'Email', 'Status', 'Article ID', 'Article Title'])
             for email in emails:
-                cw.writerow([email.id, email.email, email.verification_status, email.article.id, email.article.title])
+                art_id = email.article.id if email.article else ''
+                art_title = email.article.title if email.article else ''
+                cw.writerow([email.id, email.email, email.verification_status, art_id, art_title])
             
             output = make_response(si.getvalue())
             output.headers["Content-Disposition"] = f"attachment; filename=emails_journal_{journal_id}.csv"
@@ -592,7 +610,7 @@ def report_emails_multi_journal():
     
     counts = session.query(
         Journal.id,
-        func.count(CapturedEmail.id)
+        func.count(func.distinct(CapturedEmail.email))
     ).outerjoin(Edition, Edition.journal_id == Journal.id)\
      .outerjoin(Article, Article.edition_id == Edition.id)\
      .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
@@ -610,18 +628,27 @@ def report_emails_multi_journal():
     emails = []
     
     if journal_ids:
-        query = session.query(CapturedEmail).join(Article).join(Edition).filter(Edition.journal_id.in_(journal_ids))
+        query = session.query(CapturedEmail)\
+            .join(Article, CapturedEmail.article_id == Article.id)\
+            .join(Edition, Article.edition_id == Edition.id)\
+            .filter(Edition.journal_id.in_(journal_ids))
         
         if status_filter:
             query = query.filter(CapturedEmail.verification_status == status_filter)
             
+        query = query.group_by(CapturedEmail.email).order_by(CapturedEmail.email.asc())
+        
         if export == 'csv':
             emails = query.all()
             si = io.StringIO()
             cw = csv.writer(si)
             cw.writerow(['ID do Periódico', 'Nome do Periódico', 'ID', 'Email', 'Status', 'Article ID', 'Article Title'])
             for email in emails:
-                cw.writerow([email.article.edition.journal.id, email.article.edition.journal.name, email.id, email.email, email.verification_status, email.article.id, email.article.title])
+                j_id = email.article.edition.journal.id if (email.article and email.article.edition and email.article.edition.journal) else ''
+                j_name = email.article.edition.journal.name if (email.article and email.article.edition and email.article.edition.journal) else ''
+                art_id = email.article.id if email.article else ''
+                art_title = email.article.title if email.article else ''
+                cw.writerow([j_id, j_name, email.id, email.email, email.verification_status, art_id, art_title])
             
             output = make_response(si.getvalue())
             output.headers["Content-Disposition"] = "attachment; filename=emails_multi_journal.csv"
@@ -651,7 +678,10 @@ def report_emails_general():
     status = request.args.get('status')
     export = request.args.get('export')
     
-    query = session.query(CapturedEmail).join(Article).join(Edition).join(Journal)
+    query = session.query(CapturedEmail)\
+        .join(Article, CapturedEmail.article_id == Article.id)\
+        .join(Edition, Article.edition_id == Edition.id)\
+        .join(Journal, Edition.journal_id == Journal.id)
     
     if journal_id:
         query = query.filter(Journal.id == journal_id)
@@ -662,14 +692,18 @@ def report_emails_general():
     if status:
         query = query.filter(CapturedEmail.verification_status == status)
         
+    query = query.group_by(CapturedEmail.email)
+        
     if export == 'csv':
-        # Export all matching (potentially limited to reasonable number if huge, but let's export all)
-        emails = query.all()
+        # Export all matching
+        emails = query.order_by(CapturedEmail.email.asc()).all()
         si = io.StringIO()
         cw = csv.writer(si)
         cw.writerow(['ID', 'Email', 'Status', 'Journal', 'Article'])
         for email in emails:
-            cw.writerow([email.id, email.email, email.verification_status, email.article.edition.journal.name, email.article.title])
+            j_name = email.article.edition.journal.name if (email.article and email.article.edition and email.article.edition.journal) else ''
+            art_title = email.article.title if email.article else ''
+            cw.writerow([email.id, email.email, email.verification_status, j_name, art_title])
         
         output = make_response(si.getvalue())
         output.headers["Content-Disposition"] = "attachment; filename=emails_general.csv"
