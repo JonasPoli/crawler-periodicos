@@ -184,78 +184,83 @@ class DBManager:
             print(f"Error locking edition: {e}")
             return None
 
-    def reset_stuck_tasks(self, timeout_minutes=30):
+    def reset_stuck_tasks(self, timeout_minutes=30, journal_id=None):
         """
-        Reset tasks that have been locked for too long.
+        Reset tasks that have been locked for too long or left in processing state after a crash.
         """
-        limit = datetime.datetime.utcnow() - datetime.timedelta(minutes=timeout_minutes)
-        
-        # Reset Editions
-        num_editions = self.session.query(Edition).filter(
-            Edition.status == 'processing',
-            Edition.lock_time < limit
-        ).update({
-            'status': 'found', 
-            'worker_id': None, 
-            'lock_time': None
-        })
-        
-        # Reset Articles
-        num_articles = self.session.query(Article).filter(
-            Article.status == 'processing',
-            Article.lock_time < limit
-        ).update({
-            'status': 'downloaded', # Reset to downloaded so it can be picked up by processor? 
-                                    # Wait, processor picks up 'downloaded'? 
-                                    # If it was processing extraction, it should go back to 'downloaded' or 'found'?
-                                    # If it was 'found' and being downloaded, it should go back to 'found'.
-                                    # We need to distinguish phases.
-                                    # Orchestrator (Crawling) locks Article to download PDF? 
-                                    # Actually Orchestrator processes Issue to find Articles.
-                                    # Then it downloads PDFs.
-                                    # So Orchestrator might lock Article to download it.
-                                    # Let's say: 
-                                    # Phase 1: Discovery -> Adds Articles with status='found'
-                                    # Phase 2: Crawling -> Picks 'found' Article -> 'downloading' -> 'downloaded'
-                                    # Phase 3: Processing -> Picks 'downloaded' Article -> 'extracting' -> 'completed'
-           'worker_id': None,
-           'lock_time': None
-        })
-        
-        # Use simpler logic for now: Just reset 'processing' ones.
-        # But we need to know previous state. 
-        # For Edition: found -> processing -> completed. Reset to found.
-        # For Article (Crawling): found -> processing -> downloaded. Reset to found.
-        # For Article (Extraction): downloaded -> processing_extraction -> completed. Reset to downloaded.
-        
-        # Current DB schema only has 'status'.
-        # Let's assume 'processing' tasks go back to 'found' for now, 
-        # implying we might re-download. 
-        # But wait, we want to separate Crawling (PDF download) and Processing (Text extraction).
-        
-        self.session.commit()
-        if num_editions > 0 or num_articles > 0:
-            print(f"Reset {num_editions} stuck editions and {num_articles} stuck articles.")
+        try:
+            limit = None
+            if timeout_minutes and timeout_minutes > 0:
+                limit = datetime.datetime.utcnow() - datetime.timedelta(minutes=timeout_minutes)
+            
+            # --- Reset Editions ---
+            ed_query = self.session.query(Edition).filter(Edition.status == 'processing')
+            if limit:
+                ed_query = ed_query.filter((Edition.lock_time < limit) | (Edition.lock_time == None))
+            if journal_id:
+                ed_query = ed_query.filter(Edition.journal_id == journal_id)
+            num_editions = ed_query.update({'status': 'found', 'worker_id': None, 'lock_time': None}, synchronize_session=False)
 
+            # --- Reset Articles (Crawling) ---
+            art_crawl_query = self.session.query(Article).filter(Article.status.in_(['processing', 'processing_crawling']))
+            if limit:
+                art_crawl_query = art_crawl_query.filter((Article.lock_time < limit) | (Article.lock_time == None))
+            if journal_id:
+                edition_ids = self.session.query(Edition.id).filter(Edition.journal_id == journal_id)
+                art_crawl_query = art_crawl_query.filter(Article.edition_id.in_(edition_ids))
+            num_art_crawl = art_crawl_query.update({'status': 'found', 'worker_id': None, 'lock_time': None}, synchronize_session=False)
+
+            # --- Reset Articles (Extraction) ---
+            art_proc_query = self.session.query(Article).filter(Article.status == 'processing_extraction')
+            if limit:
+                art_proc_query = art_proc_query.filter((Article.lock_time < limit) | (Article.lock_time == None))
+            if journal_id:
+                edition_ids = self.session.query(Edition.id).filter(Edition.journal_id == journal_id)
+                art_proc_query = art_proc_query.filter(Article.edition_id.in_(edition_ids))
+            num_art_proc = art_proc_query.update({'status': 'downloaded', 'worker_id': None, 'lock_time': None}, synchronize_session=False)
+
+            # --- Reset Captured Emails (Verification) ---
+            email_query = self.session.query(CapturedEmail).filter(CapturedEmail.verification_status == 'PROCESSING')
+            if limit:
+                email_query = email_query.filter((CapturedEmail.lock_time < limit) | (CapturedEmail.lock_time == None))
+            if journal_id:
+                article_ids = self.session.query(Article.id).join(Edition).filter(Edition.journal_id == journal_id)
+                email_query = email_query.filter(CapturedEmail.article_id.in_(article_ids))
+            num_emails = email_query.update({'verification_status': 'PENDING', 'worker_id': None, 'lock_time': None}, synchronize_session=False)
+
+            self.session.commit()
+            total_reset = num_editions + num_art_crawl + num_art_proc + num_emails
+            if total_reset > 0:
+                print(f"Reset {num_editions} editions, {num_art_crawl + num_art_proc} articles, {num_emails} emails (Total: {total_reset}).")
+            return total_reset
+        except Exception as e:
+            self.session.rollback()
+            print(f"Error resetting stuck tasks: {e}")
+            return 0
 
     # --- Articles ---
     def add_article(self, edition_id, title, url, doi=None, abstract=None, date=None, authors_list=None):
         """
         authors_list: list of dicts {'name': '...', 'email': '...', 'affiliation': '...'}
         """
-        # Check if already exists in this edition (by title or URL)
+        clean_url = url.strip().rstrip('/') if url else None
+        clean_title = title.strip() if title else "Unknown Title"
+
+        # Check if already exists in DB
         article = None
-        if url:
-             article = self.session.query(Article).filter_by(url=url).first()
+        if clean_url:
+            article = self.session.query(Article).filter(
+                (Article.url == clean_url) | (Article.url == f"{clean_url}/")
+            ).first()
         
         if not article:
-             if title and title != "Unknown Title":
-                 article = self.session.query(Article).filter_by(edition_id=edition_id, title=title).first()
+            if clean_title and clean_title != "Unknown Title":
+                article = self.session.query(Article).filter_by(edition_id=edition_id, title=clean_title).first()
 
         if article:
-            # Update title if it was a placeholder
-            if title and title != "Unknown Title" and article.title == "Unknown Title":
-                article.title = title
+            # Update title if it was placeholder
+            if clean_title and clean_title != "Unknown Title" and article.title == "Unknown Title":
+                article.title = clean_title
                 self.session.commit()
             
             # Update abstract if provided
@@ -272,8 +277,8 @@ class DBManager:
 
         article = Article(
             edition_id=edition_id,
-            title=title,
-            url=url,
+            title=clean_title,
+            url=clean_url,
             doi=doi,
             abstract=abstract,
             published_date=date,

@@ -157,19 +157,33 @@ def monitor_progress(stop_event, journal_id=None):
         pbar_verify.close()
         db_manager.close()
 
-def reprocess_zero_email_journals(workers):
+def reprocess_zero_email_journals(workers, journal_id=None):
     """
     Detect journals that ended with zero captured emails and run the
     full pipeline again for them.
     """
     db_manager = DBManager()
-    zero_email_journals = db_manager.get_journals_with_no_emails()
+    if journal_id:
+        # Check if the specific journal ended with zero emails
+        subq = db_manager.session.query(CapturedEmail.article_id).distinct()
+        has_emails = db_manager.session.query(Article).join(Edition).filter(
+            Edition.journal_id == journal_id,
+            Article.id.in_(subq)
+        ).first()
+        zero_email_journals = []
+        if not has_emails:
+            j = db_manager.session.query(Journal).get(journal_id)
+            if j:
+                zero_email_journals = [j]
+    else:
+        zero_email_journals = db_manager.get_journals_with_no_emails()
+
     if not zero_email_journals:
         print("No journals with zero emails – nothing to re-process.")
+        db_manager.close()
         return
 
     print(f"Re-processing {len(zero_email_journals)} journal(s) with zero emails.")
-    # Use standard logging
     import logging
     os.makedirs('logs', exist_ok=True)
     logging.basicConfig(
@@ -186,34 +200,30 @@ def reprocess_zero_email_journals(workers):
         
     db_manager.close()
 
-    # Run discovery only for the selected journals
-    # (the existing discovery phase already loops over all active journals,
-    #  but because we cleared `last_crawled_at` it will pick them up again)
-    # Note: reprocess_zero_email_journals doesn't currently support journal_id filtering 
-    # but it could be added if needed. For now, it processes all zero-email journals.
-    run_discovery_phase()
+    # Run discovery only for the selected journal(s)
+    run_discovery_phase(journal_id)
 
-    # Run the workers again – same as the normal super flow
+    # Run the workers again
     stop_event = multiprocessing.Event()
     processes = []
     
     for i in range(workers):
-        p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-Rep-{i+1}", stop_event))
+        p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-Rep-{i+1}", stop_event, journal_id))
         p.start()
         processes.append(p)
         
     for i in range(workers):
-        p = multiprocessing.Process(target=run_processor_worker, args=(f"Proc-Rep-{i+1}", stop_event))
+        p = multiprocessing.Process(target=run_processor_worker, args=(f"Proc-Rep-{i+1}", stop_event, journal_id))
         p.start()
         processes.append(p)
         
     for i in range(workers):
-        p = multiprocessing.Process(target=run_verifier_worker, args=(f"Veri-Rep-{i+1}", stop_event))
+        p = multiprocessing.Process(target=run_verifier_worker, args=(f"Veri-Rep-{i+1}", stop_event, journal_id))
         p.start()
         processes.append(p)
 
     try:
-        monitor_progress(stop_event)
+        monitor_progress(stop_event, journal_id=journal_id)
     except KeyboardInterrupt:
         print("\nStopping RE-PROCESS...")
         stop_event.set()
@@ -235,11 +245,8 @@ def run_parallel_workers(target_func, num_workers=4, label="Worker", journal_id=
     
     # Monitor thread
     monitor_stop = threading.Event()
-    # monitor_thread = threading.Thread(target=monitor_progress, args=(monitor_stop,))
-    # monitor_thread.start()
     
     try:
-        # Simple Loop to check liveness
         while True:
             alive_count = sum(1 for p in processes if p.is_alive())
             if alive_count == 0:
@@ -269,8 +276,8 @@ def main():
     db_manager = DBManager()
     
     if args.mode == 'reset':
-        print("Resetting stuck tasks...")
-        db_manager.reset_stuck_tasks()
+        print(f"Resetting stuck tasks for journal {args.id if args.id else 'ALL'}...")
+        db_manager.reset_stuck_tasks(timeout_minutes=0, journal_id=args.id)
         
     elif args.mode == 'discover':
         run_discovery_phase(args.id)
@@ -285,10 +292,9 @@ def main():
         run_parallel_workers(run_verifier_worker, args.workers, "Verifier", args.id)
         
     elif args.mode == 'super':
-        # The FULL SUPER PROCESS
-        # This is tricky because we want parallelism ACROSS phases or SEQUENTIAL phases?
-        # The user request implies "Process Journals -> Process Editions/Articles -> Process PDF -> Verify"
-        # Since 'process' needs 'downloaded' PDFs, and 'verify' needs 'extracted' emails, we can run them all in parallel if the queue is fed.
+        # 0. Crash Recovery / Auto-Reset stuck tasks from previous crashed runs
+        print("Auto-recovering any stuck tasks from previous runs...")
+        db_manager.reset_stuck_tasks(timeout_minutes=0, journal_id=args.id)
         
         print("Starting SUPER PROCESS (All workers parallel)...")
         print("To STOP: Press Ctrl+C or run 'pkill -f run_fast.py'")
@@ -296,8 +302,7 @@ def main():
         stop_event = multiprocessing.Event()
         processes = []
         
-        # 1. Discovery (can generate work while others run?)
-        # Discovery is usually fast enough to run first.
+        # 1. Discovery
         run_discovery_phase(args.id)
         
         # 2. Start Workers
@@ -319,7 +324,7 @@ def main():
             p.start()
             processes.append(p)
             
-        # Monitor (runs in background thread so we can also watch worker processes)
+        # Monitor thread
         monitor_thread = threading.Thread(
             target=monitor_progress,
             args=(stop_event,),
@@ -359,7 +364,7 @@ def main():
                 else:
                     empty_streak = 0
                 
-                if empty_streak >= 8:
+                if empty_streak >= 5:
                     print("\nAll queues are empty. Stopping workers...")
                     stop_event.set()
                     break
@@ -378,13 +383,11 @@ def main():
         monitor_thread.join(timeout=5)
         print("Done.")
 
-        # ----- NEW STEP: Re-process journals with zero emails -----
-        # Only run if we actually completed the main super process and weren't interrupted early
-        # (we check if all processes finished with exit code 0)
+        # Phase 2: Re-process journals with zero emails
         all_ok = all(p.exitcode == 0 for p in processes)
         if all_ok:
             print("\n--- Phase 2: RE-VERIFY ZERO-EMAIL JOURNALS ---")
-            reprocess_zero_email_journals(args.workers)
+            reprocess_zero_email_journals(args.workers, journal_id=args.id)
 
 
 if __name__ == "__main__":

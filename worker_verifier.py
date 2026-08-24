@@ -28,28 +28,44 @@ logging.basicConfig(
 def log(worker_id, message, level=logging.INFO):
     logging.log(level, f"[Verifier {worker_id}] {message}")
 
+# In-memory caches for fast domain/MX resolution
+DOMAIN_DNS_CACHE = {}
+DOMAIN_MX_CACHE = {}
+
 def verify_syntax(email):
     return bool(EMAIL_REGEX.match(email))
 
 def verify_domain_dns(domain):
+    domain = domain.lower()
+    if domain in DOMAIN_DNS_CACHE:
+        return DOMAIN_DNS_CACHE[domain]
     try:
         dns.resolver.resolve(domain, 'MX')
+        DOMAIN_DNS_CACHE[domain] = True
         return True
     except (dns.resolver.NoAnswer, dns.resolver.NXDOMAIN):
         try:
             dns.resolver.resolve(domain, 'A')
+            DOMAIN_DNS_CACHE[domain] = True
             return True
         except:
+            DOMAIN_DNS_CACHE[domain] = False
             return False
     except:
+        DOMAIN_DNS_CACHE[domain] = False
         return False
 
 def get_mx_record(domain):
+    domain = domain.lower()
+    if domain in DOMAIN_MX_CACHE:
+        return DOMAIN_MX_CACHE[domain]
     try:
         records = dns.resolver.resolve(domain, 'MX')
-        mx_record = str(records[0].exchange)
+        mx_record = str(records[0].exchange).rstrip('.')
+        DOMAIN_MX_CACHE[domain] = mx_record
         return mx_record
     except:
+        DOMAIN_MX_CACHE[domain] = None
         return None
 
 def verify_smtp(email, mx_record):
@@ -57,19 +73,21 @@ def verify_smtp(email, mx_record):
         return False
     
     try:
-        server = smtplib.SMTP(timeout=5)
+        server = smtplib.SMTP(timeout=3)
         server.set_debuglevel(0)
         
         # Connect
-        code, message = server.connect(mx_record)
+        code, message = server.connect(mx_record, 25)
         if code != 220:
-            server.quit()
+            try: server.quit()
+            except: pass
             return False
         
-        server.helo(socket.gethostname())
-        server.mail('test@example.com')
+        server.helo('mail.crawler.local')
+        server.mail('verify@crawler.local')
         code, message = server.rcpt(email)
-        server.quit()
+        try: server.quit()
+        except: pass
         
         if code == 250:
             return True
@@ -156,9 +174,6 @@ def run_verifier_worker(worker_id, stop_event=None, journal_id=None):
                 email_record.worker_id = None
                 email_record.lock_time = None
                 db_manager.session.commit()
-                
-                # Cooldown sleep
-                time.sleep(0.5)
             
             except Exception as e:
                 log(worker_id, f"ERROR verifying {email_addr}: {e}")
@@ -166,8 +181,6 @@ def run_verifier_worker(worker_id, stop_event=None, journal_id=None):
                     db_manager.session.rollback()
                 except:
                     pass
-                # Cooldown sleep on error
-                time.sleep(0.5)
 
     except KeyboardInterrupt:
         log(worker_id, "Stopping...")

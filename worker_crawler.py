@@ -96,7 +96,6 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                     except:
                         db_manager.session.rollback()
                 
-                time.sleep(0.5)
                 continue # Loop again to prefer Editions until exhausted
 
             # PRIORITY 2: Process Pending Articles (Download PDF)
@@ -105,6 +104,20 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
             if article:
                 empty_cycles = 0
                 try:
+                    # Check if already has a valid file on disk (anti-duplicate check)
+                    existing_file = False
+                    for f in article.files:
+                        if f.file_type == 'pdf' and f.local_path and os.path.exists(f.local_path) and os.path.getsize(f.local_path) > 1000:
+                            article.status = 'downloaded'
+                            article.worker_id = None
+                            article.lock_time = None
+                            db_manager.session.commit()
+                            existing_file = True
+                            break
+                    
+                    if existing_file:
+                        continue
+
                     # Get Journal info
                     journal = article.edition.journal
                     if not journal:
@@ -129,7 +142,6 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                         crawlers[crawler_key] = crawler
 
                     # Fetch Metadata & Download
-                    # log(worker_id, f"Downloading Article {article.id}...")
                     start_time = time.time()
                     
                     meta = crawler.fetch_article_metadata(article.url)
@@ -181,7 +193,6 @@ def run_crawler_worker(worker_id, stop_event=None, journal_id=None):
                     except:
                         db_manager.session.rollback()
                 
-                time.sleep(0.5)
                 continue
 
             # No work found

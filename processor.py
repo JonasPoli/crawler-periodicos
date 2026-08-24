@@ -60,18 +60,23 @@ class Processor:
 
     def extract_text_from_pdf(self, pdf_path, methods_to_run=None):
         """
-        Extract text using specified methods.
-        If methods_to_run is None, runs all available.
+        Extract text using specified methods with fast cascading.
+        Runs pypdf first (fast) and only falls back to pdfplumber if pypdf yields insufficient text.
         """
         text = ""
         if methods_to_run is None:
             methods_to_run = self.AVAILABLE_METHODS
 
         if 'pypdf' in methods_to_run:
-            text += self._extract_with_pypdf(pdf_path)
+            text = self._extract_with_pypdf(pdf_path)
+            # Fast-path: If pypdf extracted meaningful text, skip heavy pdfplumber
+            if len(text.strip()) >= 100:
+                return text
         
         if 'pdfplumber' in methods_to_run:
-            text += self._extract_with_pdfplumber(pdf_path)
+            plumber_text = self._extract_with_pdfplumber(pdf_path)
+            if plumber_text:
+                text += "\n" + plumber_text
              
         return text
 

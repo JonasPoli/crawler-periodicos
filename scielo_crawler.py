@@ -1,5 +1,9 @@
 import os
+import re
+import hashlib
 import requests
+from requests.adapters import HTTPAdapter
+from urllib3.util.retry import Retry
 from bs4 import BeautifulSoup
 import time
 from urllib.parse import urljoin
@@ -7,7 +11,7 @@ from metadata_manager import MetadataManager
 
 class SciELOCrawler:
     def __init__(self, base_url, journal_name, download_dir='downloads_scielo', metadata_manager=None, db_manager=None, force=False):
-        self.base_url = base_url
+        self.base_url = base_url.strip().rstrip('/')
         self.journal_name = journal_name
         self.download_dir = download_dir
         self.metadata_manager = metadata_manager
@@ -15,54 +19,47 @@ class SciELOCrawler:
         self.force = force
         
         if not os.path.exists(download_dir):
-            os.makedirs(download_dir)
+            os.makedirs(download_dir, exist_ok=True)
             
         self.session = requests.Session()
+        retries = Retry(total=3, backoff_factor=0.3, status_forcelist=[502, 503, 504])
+        adapter = HTTPAdapter(max_retries=retries, pool_connections=20, pool_maxsize=20)
+        self.session.mount('http://', adapter)
+        self.session.mount('https://', adapter)
         self.session.headers.update({
-            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Safari/537.36'
+            'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
         })
 
     def get_soup(self, url):
         try:
-            response = self.session.get(url, timeout=10)
+            response = self.session.get(url, timeout=12)
             response.raise_for_status()
             return BeautifulSoup(response.content, 'html.parser')
         except Exception as e:
-            print(f"Error fetching {url}: {e}")
             return None
 
     def get_all_issues(self):
-        # Grid page: https://www.scielo.br/j/[acronym]/grid
         grid_url = f"{self.base_url}/grid"
-        print(f"Fetching grid: {grid_url}")
         soup = self.get_soup(grid_url)
         if not soup:
             return []
 
         issue_links = []
-        base_path = self.base_url.replace("https://www.scielo.br", "")
+        base_path = self.base_url.replace("https://www.scielo.br", "").replace("http://www.scielo.br", "")
         
         for a in soup.find_all('a', href=True):
-            href = a['href']
-            if '/i/' in href and base_path in href:
-                if href.startswith('/'):
-                    href = f"https://www.scielo.br{href}"
-                issue_links.append(href)
+            href = a['href'].strip()
+            if '/i/' in href and (not base_path or base_path in href):
+                full_url = urljoin(self.base_url, href)
+                if full_url not in issue_links:
+                    issue_links.append(full_url)
         
         return list(set(issue_links))
 
     def process_issue(self, issue_url):
-        print(f"Processing issue: {issue_url}")
         article_links = self.get_article_urls(issue_url)
-        print(f"  Found {len(article_links)} potential article links.")
-        
-        # Verify deduplication for language... 
-        # Often SciELO links to same article in en/pt/es. 
-        # Visiting all is fine, we just want to ensure we get the metadata.
-        
         for art_url in article_links:
             if not self.force and self.db_manager and self.db_manager.is_article_completed(art_url):
-                print(f"  Skipping completed article: {art_url}")
                 continue
             self.process_article(art_url)
 
@@ -71,19 +68,11 @@ class SciELOCrawler:
         if not soup:
             return []
 
-        # Find links to ARTICLES (abstracts/texts), not just PDFs
-        # Pattern: /j/rap/a/[ID]/...
         article_links = []
-        
         for a in soup.find_all('a', href=True):
-            href = a['href']
-            # We want the text/abstract page. Usually doesn't have 'format=pdf'
+            href = a['href'].strip()
             if '/a/' in href and 'format=pdf' not in href:
-                full_url = href
-                if full_url.startswith('/'):
-                    full_url = f"https://www.scielo.br{full_url}"
-                
-                # Deduplicate
+                full_url = urljoin(issue_url, href).split('?')[0].split('#')[0]
                 if full_url not in article_links:
                     article_links.append(full_url)
         return article_links
@@ -97,12 +86,8 @@ class SciELOCrawler:
 
         if pdf_url:
             local_path = self.download_pdf_direct(pdf_url, filename)
-            
-            # Only save metadata (and file record) if we actually have the file (downloaded or existed)
             if local_path and self.metadata_manager:
                 self.metadata_manager.save_metadata(meta)
-            
-            # Mark as completed in DB if download successful (or skipped as existing)
             if local_path and self.db_manager:
                 self.db_manager.mark_article_completed_by_url(article_url)
 
@@ -111,31 +96,30 @@ class SciELOCrawler:
         if not soup:
             return None
 
-        # Use Standard Meta Tags (Dublin Core / Google Scholar)
         title = "Unknown Title"
         authors = "Unknown Authors"
         
-        # Title
         meta_title = soup.find('meta', attrs={'name': 'citation_title'})
-        if meta_title:
-            title = meta_title['content']
+        if meta_title and meta_title.get('content', '').strip():
+            title = meta_title['content'].strip()
             
-        # Authors
         meta_authors = []
         for meta in soup.find_all('meta', attrs={'name': 'citation_author'}):
-            meta_authors.append(meta['content'])
+            if meta.get('content', '').strip():
+                meta_authors.append(meta['content'].strip())
         if meta_authors:
             authors = ", ".join(meta_authors)
 
-        # PDF Link
         pdf_url = None
         pdf_meta = soup.find('meta', attrs={'name': 'citation_pdf_url'})
-        if pdf_meta:
-            pdf_url = pdf_meta['content']
+        if pdf_meta and pdf_meta.get('content', '').strip():
+            pdf_url = pdf_meta['content'].strip()
         
         filename = None
         if pdf_url:
-             filename = self.generate_filename(pdf_url)
+             full_pdf_url = urljoin(article_url, pdf_url)
+             filename = self.generate_filename(full_pdf_url, article_url)
+             pdf_url = full_pdf_url
 
         return {
             'journal': self.journal_name,
@@ -147,42 +131,43 @@ class SciELOCrawler:
             'pdf_filename': filename
         }
 
-    def generate_filename(self, pdf_url):
-        # Determine lang from PDF url if possible
+    def generate_filename(self, pdf_url, article_url=None):
         lang = 'unknown'
         if 'lang=en' in pdf_url: lang = 'en'
         elif 'lang=pt' in pdf_url: lang = 'pt'
         elif 'lang=es' in pdf_url: lang = 'es'
 
-        # Filename
         if '/a/' in pdf_url:
             try:
                 parts = pdf_url.split('/a/')[1].split('/')
                 article_id = parts[0]
-                filename = f"{article_id}_{lang}.pdf"
+                if article_id:
+                    return f"scielo_{article_id}_{lang}.pdf"
             except:
-                    filename = f"scielo_{int(time.time())}.pdf"
-        else:
-            filename = f"scielo_{int(time.time())}.pdf"
-        return filename
+                pass
+
+        target = article_url or pdf_url
+        url_hash = hashlib.md5(target.encode('utf-8')).hexdigest()[:16]
+        return f"scielo_{url_hash}_{lang}.pdf"
 
     def download_pdf_direct(self, pdf_url, filename):
+        if not pdf_url or not filename:
+            return None
         local_path = os.path.join(self.download_dir, filename)
         if not self.force and os.path.exists(local_path) and os.path.getsize(local_path) > 1000:
-            # print(f"Skipping existing (valid): {filename}")
             return local_path
             
-        print(f"Downloading: {pdf_url}")
         try:
-            with self.session.get(pdf_url, stream=True) as r:
+            with self.session.get(pdf_url, stream=True, timeout=30) as r:
                 r.raise_for_status()
                 with open(local_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=8192):
+                    for chunk in r.iter_content(chunk_size=16384):
                         f.write(chunk)
-            time.sleep(1)
             return local_path
         except Exception as e:
-            print(f"Failed to download {pdf_url}: {e}")
+            if os.path.exists(local_path) and os.path.getsize(local_path) < 1000:
+                try: os.remove(local_path)
+                except: pass
             return None
     
     def download_pdf(self, pdf_url, filename):
