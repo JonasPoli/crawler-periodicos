@@ -62,6 +62,9 @@ def get_mx_record(domain):
     try:
         records = dns.resolver.resolve(domain, 'MX')
         mx_record = str(records[0].exchange).rstrip('.')
+        if not mx_record or mx_record == '.':
+            DOMAIN_MX_CACHE[domain] = None
+            return None
         DOMAIN_MX_CACHE[domain] = mx_record
         return mx_record
     except:
@@ -141,15 +144,17 @@ def run_verifier_worker(worker_id, stop_event=None, journal_id=None):
                     # 2. Domain & MX
                     mx_record = get_mx_record(domain)
                     
-                    email_record.valid_domain = True 
                     if not mx_record:
                         if verify_domain_dns(domain):
                             email_record.valid_domain = True
                             email_record.valid_mx = False
+                            email_record.valid_smtp = False
+                            email_record.verification_status = 'INVALID'
                             status_detail = "NO_MX_RECORD"
                         else:
                             email_record.valid_domain = False
                             email_record.valid_mx = False
+                            email_record.valid_smtp = False
                             email_record.verification_status = 'INVALID'
                             status_detail = "DOMAIN_INVALID"
                     else:
@@ -178,9 +183,12 @@ def run_verifier_worker(worker_id, stop_event=None, journal_id=None):
             except Exception as e:
                 log(worker_id, f"ERROR verifying {email_addr}: {e}")
                 try:
-                    db_manager.session.rollback()
+                    email_record.verification_status = 'INVALID'
+                    email_record.worker_id = None
+                    email_record.lock_time = None
+                    db_manager.session.commit()
                 except:
-                    pass
+                    db_manager.session.rollback()
 
     except KeyboardInterrupt:
         log(worker_id, "Stopping...")

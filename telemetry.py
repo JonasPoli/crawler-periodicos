@@ -212,8 +212,10 @@ class TelemetryManager:
                 "recent_errors": [{"type": e.error_type, "phase": e.phase, "msg": e.message} for e in errors[-10:]]
             }
 
-            # Export JSON
-            json_path = os.path.join(RUNS_DIR, f"{run_id}.json")
+            # Export Markdown report
+            md_path = os.path.join(RUNS_DIR, f"{run_id}.md")
+            summary["report_path"] = md_path
+            summary["emails_extracted"] = run.emails_extracted
             with open(json_path, 'w', encoding='utf-8') as f:
                 json.dump(summary, f, indent=2, ensure_ascii=False)
 

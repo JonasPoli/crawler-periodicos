@@ -124,7 +124,8 @@ def monitor_progress(stop_event, journal_id=None):
                 ).count()
                 c_completed = article_base.filter(
                     Article.status.in_(['downloaded', 'completed', 'no_pdf',
-                                        'error_download', 'error_metadata', 'error_exception'])
+                                        'error_download', 'error_metadata', 'error_exception',
+                                        'error_nofile', 'error_processing'])
                 ).count()
 
                 # Processing
@@ -132,7 +133,7 @@ def monitor_progress(stop_event, journal_id=None):
                     Article.status.in_(['downloaded', 'processing_extraction'])
                 ).count()
                 p_completed = article_base.filter(
-                    Article.status.in_(['completed'])
+                    Article.status.in_(['completed', 'error_nofile', 'error_processing'])
                 ).count()
 
                 # Verifying
@@ -235,13 +236,59 @@ def reprocess_zero_email_journals(workers, journal_id=None, agent_type='rotate')
         p.start()
         processes.append(p)
 
+    monitor_thread = threading.Thread(
+        target=monitor_progress,
+        args=(stop_event,),
+        kwargs={"journal_id": journal_id},
+        daemon=True
+    )
+    monitor_thread.start()
+
     try:
-        monitor_progress(stop_event, journal_id=journal_id)
+        db_checker = DBManager()
+        empty_streak = 0
+        while True:
+            alive = [p for p in processes if p.is_alive()]
+            if not alive:
+                stop_event.set()
+                break
+
+            session = db_checker.session
+            article_base = session.query(Article).join(Edition).join(Journal)
+            email_base = session.query(CapturedEmail).join(Article).join(Edition).join(Journal)
+            edition_base = session.query(Edition).join(Journal)
+            
+            if journal_id:
+                article_base = article_base.filter(Journal.id == journal_id)
+                email_base = email_base.filter(Journal.id == journal_id)
+                edition_base = edition_base.filter(Journal.id == journal_id)
+            
+            pending_editions = edition_base.filter(Edition.status.in_(['found', 'processing'])).count()
+            pending_crawl = article_base.filter(Article.status.in_(['found', 'processing_crawling'])).count()
+            pending_proc = article_base.filter(Article.status.in_(['downloaded', 'processing_extraction'])).count()
+            pending_verify = email_base.filter(CapturedEmail.verification_status.in_(['PENDING', 'PROCESSING'])).count()
+            
+            if pending_editions == 0 and pending_crawl == 0 and pending_proc == 0 and pending_verify == 0:
+                empty_streak += 1
+            else:
+                empty_streak = 0
+
+            if empty_streak >= 5:
+                print("\nAll re-process queues are empty. Stopping workers...")
+                stop_event.set()
+                break
+
+            session.commit()
+            time.sleep(2)
+        db_checker.close()
+
     except KeyboardInterrupt:
         print("\nStopping RE-PROCESS...")
         stop_event.set()
+    finally:
         for p in processes:
             p.join()
+        monitor_thread.join(timeout=5)
         print("Re-process done.")
 
 def run_parallel_workers(target_func, num_workers=4, label="Worker", journal_id=None, agent_type='rotate'):
