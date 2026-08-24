@@ -269,12 +269,20 @@ def main():
         epilog="To STOP the process, use Ctrl+C in the terminal. If stuck, run 'pkill -f run_fast.py'"
     )
     parser.add_argument('mode', choices=['discover', 'crawl', 'process', 'verify', 'reset', 'all', 'super'], help="Mode of operation")
-    parser.add_argument('--workers', type=int, default=2, help="Number of parallel workers per phase")
+    parser.add_argument('--workers', type=int, default=2, help="Default workers count per phase")
+    parser.add_argument('--crawlers', type=int, default=None, help="Number of parallel crawler workers (downloads & scraping). Default: 4")
+    parser.add_argument('--processors', type=int, default=None, help="Number of parallel processor workers (PDF extraction). Default: 2")
+    parser.add_argument('--verifiers', type=int, default=None, help="Number of parallel verifier workers (Email DNS/SMTP). Default: 2")
     parser.add_argument('--id', type=int, default=None, help="Specific Journal ID to process")
     parser.add_argument('--agent', choices=['rotate', 'chrome', 'googlebot', 'gptbot', 'bingbot', 'firefox', 'safari'], default='rotate', help="User-Agent profile to emulate")
     
     args = parser.parse_args()
     
+    # Calculate specialized worker counts
+    crawlers_count = args.crawlers if args.crawlers else max(args.workers * 2, 4)
+    processors_count = args.processors if args.processors else args.workers
+    verifiers_count = args.verifiers if args.verifiers else args.workers
+
     db_manager = DBManager()
     
     if args.mode == 'reset':
@@ -286,13 +294,13 @@ def main():
         run_discovery_phase(args.id, agent_type=args.agent)
         
     elif args.mode == 'crawl':
-        run_parallel_workers(run_crawler_worker, args.workers, "Crawler", args.id, agent_type=args.agent)
+        run_parallel_workers(run_crawler_worker, crawlers_count, "Crawler", args.id, agent_type=args.agent)
         
     elif args.mode == 'process':
-        run_parallel_workers(run_processor_worker, args.workers, "Processor", args.id)
+        run_parallel_workers(run_processor_worker, processors_count, "Processor", args.id)
         
     elif args.mode == 'verify':
-        run_parallel_workers(run_verifier_worker, args.workers, "Verifier", args.id)
+        run_parallel_workers(run_verifier_worker, verifiers_count, "Verifier", args.id)
         
     elif args.mode == 'super':
         # 0. Crash Recovery / Auto-Reset stuck tasks from previous crashed runs
@@ -303,12 +311,12 @@ def main():
         run_id = TelemetryManager.start_run(
             mode=f"super ({args.agent})", 
             journal_id=args.id, 
-            workers=args.workers, 
+            workers=crawlers_count, 
             recovered_tasks=recovered_count
         )
         print(f"Telemetry tracking active: [{run_id}]")
         
-        print(f"Starting SUPER PROCESS (All workers parallel | Agent: {args.agent})...")
+        print(f"Starting SUPER PROCESS (Workers: {crawlers_count} Crawlers, {processors_count} Processors, {verifiers_count} Verifiers | Agent: {args.agent})...")
         print("To STOP: Press Ctrl+C or run 'pkill -f run_fast.py'")
         
         stop_event = multiprocessing.Event()
@@ -319,20 +327,20 @@ def main():
         run_discovery_phase(args.id, agent_type=args.agent)
         
         # 2. Start Workers
-        # Crawlers
-        for i in range(args.workers):
+        # Crawlers (Downloads & Scraping)
+        for i in range(crawlers_count):
             p = multiprocessing.Process(target=run_crawler_worker, args=(f"Craw-{i+1}", stop_event, args.id, args.agent))
             p.start()
             processes.append(p)
             
-        # Processors
-        for i in range(args.workers):
+        # Processors (Text/Email Extraction)
+        for i in range(processors_count):
             p = multiprocessing.Process(target=run_processor_worker, args=(f"Proc-{i+1}", stop_event, args.id))
             p.start()
             processes.append(p)
             
-        # Verifiers
-        for i in range(args.workers):
+        # Verifiers (Email Validation)
+        for i in range(verifiers_count):
             p = multiprocessing.Process(target=run_verifier_worker, args=(f"Veri-{i+1}", stop_event, args.id))
             p.start()
             processes.append(p)

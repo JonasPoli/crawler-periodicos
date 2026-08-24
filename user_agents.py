@@ -99,7 +99,7 @@ def get_headers(agent_type="rotate"):
         
     return USER_AGENT_PROFILES.get(key, USER_AGENT_PROFILES["chrome_mac"]).copy()
 
-def create_configured_session(agent_type="rotate", pool_size=20):
+def create_configured_session(agent_type="rotate", pool_size=50):
     """
     Creates and returns a requests.Session with connection pooling, retries, and headers.
     """

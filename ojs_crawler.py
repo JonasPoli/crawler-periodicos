@@ -143,9 +143,52 @@ class OJSCrawler:
                 pass
 
     def fetch_article_metadata(self, article_url):
-        soup = self.get_soup(article_url)
-        if not soup:
+        try:
+            if self.agent_type == 'rotate':
+                self.session.headers.update(get_headers('rotate'))
+            response = self.session.get(article_url, timeout=(4, 12))
+            response.raise_for_status()
+            html_text = response.text
+        except Exception:
             return None
+
+        # 1. FAST-PATH: Try regex extraction on HTML head (0.001s vs 50ms)
+        pdf_match = re.search(r'<meta\s+name=[\"\']citation_pdf_url[\"\']\s+content=[\"\']([^\"\']+)[\"\']', html_text, re.I)
+        if not pdf_match:
+            pdf_match = re.search(r'<meta\s+content=[\"\']([^\"\']+)[\"\']\s+name=[\"\']citation_pdf_url[\"\']', html_text, re.I)
+
+        title_match = re.search(r'<meta\s+name=[\"\']citation_title[\"\']\s+content=[\"\']([^\"\']+)[\"\']', html_text, re.I)
+        if not title_match:
+            title_match = re.search(r'<meta\s+content=[\"\']([^\"\']+)[\"\']\s+name=[\"\']citation_title[\"\']', html_text, re.I)
+
+        author_matches = re.findall(r'<meta\s+name=[\"\']citation_author[\"\']\s+content=[\"\']([^\"\']+)[\"\']', html_text, re.I)
+        if not author_matches:
+            author_matches = re.findall(r'<meta\s+content=[\"\']([^\"\']+)[\"\']\s+name=[\"\']citation_author[\"\']', html_text, re.I)
+
+        if pdf_match:
+            raw_pdf_url = pdf_match.group(1).strip()
+            full_pdf_url = urljoin(article_url, raw_pdf_url)
+            if '/view/' in full_pdf_url and '/download/' not in full_pdf_url:
+                download_url = full_pdf_url.replace('/view/', '/download/')
+            else:
+                download_url = full_pdf_url
+            
+            title = title_match.group(1).strip() if title_match else "Unknown Title"
+            authors = ", ".join([a.strip() for a in author_matches]) if author_matches else "Unknown Authors"
+            filename = self.generate_filename(download_url, article_url)
+
+            return {
+                'journal': self.journal_name,
+                'issue_url': article_url,
+                'article_title': title,
+                'article_url': article_url,
+                'authors': authors,
+                'pdf_url': download_url,
+                'pdf_filename': filename
+            }
+
+        # 2. SLOW-PATH: Fallback to BeautifulSoup for non-standard templates
+        soup = BeautifulSoup(html_text, 'html.parser')
 
         title = "Unknown Title"
         meta_title = soup.find('meta', attrs={'name': 'citation_title'})
@@ -241,10 +284,10 @@ class OJSCrawler:
         try:
             if self.agent_type == 'rotate':
                 self.session.headers.update(get_headers('rotate'))
-            with self.session.get(pdf_url, stream=True, timeout=30) as r:
+            with self.session.get(pdf_url, stream=True, timeout=(5, 20)) as r:
                 r.raise_for_status()
                 with open(local_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=16384):
+                    for chunk in r.iter_content(chunk_size=65536):
                         f.write(chunk)
             return local_path
         except Exception as e:

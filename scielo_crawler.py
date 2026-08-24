@@ -89,9 +89,46 @@ class SciELOCrawler:
                 self.db_manager.mark_article_completed_by_url(article_url)
 
     def fetch_article_metadata(self, article_url):
-        soup = self.get_soup(article_url)
-        if not soup:
+        try:
+            if self.agent_type == 'rotate':
+                self.session.headers.update(get_headers('rotate'))
+            response = self.session.get(article_url, timeout=(4, 12))
+            response.raise_for_status()
+            html_text = response.text
+        except Exception:
             return None
+
+        # 1. Fast-Path Regex
+        pdf_match = re.search(r'<meta\s+name=[\"\']citation_pdf_url[\"\']\s+content=[\"\']([^\"\']+)[\"\']', html_text, re.I)
+        if not pdf_match:
+            pdf_match = re.search(r'<meta\s+content=[\"\']([^\"\']+)[\"\']\s+name=[\"\']citation_pdf_url[\"\']', html_text, re.I)
+
+        title_match = re.search(r'<meta\s+name=[\"\']citation_title[\"\']\s+content=[\"\']([^\"\']+)[\"\']', html_text, re.I)
+        if not title_match:
+            title_match = re.search(r'<meta\s+content=[\"\']([^\"\']+)[\"\']\s+name=[\"\']citation_title[\"\']', html_text, re.I)
+
+        author_matches = re.findall(r'<meta\s+name=[\"\']citation_author[\"\']\s+content=[\"\']([^\"\']+)[\"\']', html_text, re.I)
+        if not author_matches:
+            author_matches = re.findall(r'<meta\s+content=[\"\']([^\"\']+)[\"\']\s+name=[\"\']citation_author[\"\']', html_text, re.I)
+
+        if pdf_match:
+            pdf_url = urljoin(article_url, pdf_match.group(1).strip())
+            title = title_match.group(1).strip() if title_match else "Unknown Title"
+            authors = ", ".join([a.strip() for a in author_matches]) if author_matches else "Unknown Authors"
+            filename = self.generate_filename(pdf_url, article_url)
+
+            return {
+                'journal': self.journal_name,
+                'issue_url': article_url,
+                'article_title': title,
+                'article_url': article_url,
+                'authors': authors,
+                'pdf_url': pdf_url,
+                'pdf_filename': filename
+            }
+
+        # 2. Slow-Path BeautifulSoup
+        soup = BeautifulSoup(html_text, 'html.parser')
 
         title = "Unknown Title"
         authors = "Unknown Authors"
@@ -157,10 +194,10 @@ class SciELOCrawler:
         try:
             if self.agent_type == 'rotate':
                 self.session.headers.update(get_headers('rotate'))
-            with self.session.get(pdf_url, stream=True, timeout=30) as r:
+            with self.session.get(pdf_url, stream=True, timeout=(5, 20)) as r:
                 r.raise_for_status()
                 with open(local_path, 'wb') as f:
-                    for chunk in r.iter_content(chunk_size=16384):
+                    for chunk in r.iter_content(chunk_size=65536):
                         f.write(chunk)
             return local_path
         except Exception as e:
