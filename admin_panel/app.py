@@ -203,41 +203,34 @@ def list_journals():
         # Export all matching (without pagination)
         all_journals = query.order_by(Journal.name).all()
         
-        # Calculate emails for all filtered journals efficiently
-        from sqlalchemy import func
-        from database import Edition, Article, CapturedEmail
-        journal_ids = [j.id for j in all_journals]
-        
-        if journal_ids:
-            counts = session.query(
-                Journal.id,
-                func.count(func.distinct(CapturedEmail.email))
-            ).outerjoin(Edition, Edition.journal_id == Journal.id)\
-             .outerjoin(Article, Article.edition_id == Edition.id)\
-             .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
-             .filter(Journal.id.in_(journal_ids))\
-             .group_by(Journal.id).all()
-             
-            count_dict = dict(counts)
-            for j in all_journals:
-                j.email_count = count_dict.get(j.id, 0)
-        else:
-            for j in all_journals:
-                j.email_count = 0
-                
         import io
         import csv
         from flask import make_response
         si = io.StringIO()
+        si.write('\ufeff')
         cw = csv.writer(si)
-        cw.writerow(['ID', 'Nome', 'URL', 'Fonte', 'Status', 'Qualis', 'Área', 'ISSN Impresso', 'ISSN Eletrônico', 'E-mails Coletados'])
+        cw.writerow(['issn', 'title', 'qualis', 'area'])
         for j in all_journals:
-            status_text = 'Ativo' if j.active else 'Inativo'
-            cw.writerow([j.id, j.name, j.url, j.source_type, status_text, j.qualis, j.subject_area, j.issn_print, j.issn_electronic, j.email_count])
+            # Resolve ISSN
+            issn_candidates = []
+            for val in [j.issn_electronic, j.issn_print, j.issn]:
+                if val and str(val).strip():
+                    cleaned = str(val).replace('ISSN:', '').replace('issn:', '').strip()
+                    if cleaned and cleaned.lower() not in ['none', 'nan', 'null', ''] and cleaned not in issn_candidates:
+                        issn_candidates.append(cleaned)
+            issn_val = ', '.join(issn_candidates) if issn_candidates else ''
+            title_val = (j.name or '').strip()
+            qualis_val = (j.qualis or '').strip()
+            if qualis_val.lower() in ['none', 'nan']:
+                qualis_val = ''
+            area_val = (j.subject_area or '').strip()
+            if area_val.lower() in ['none', 'nan']:
+                area_val = ''
+            cw.writerow([issn_val, title_val, qualis_val, area_val])
         
         output = make_response(si.getvalue())
-        output.headers["Content-Disposition"] = "attachment; filename=periodicos_exportados.csv"
-        output.headers["Content-type"] = "text/csv"
+        output.headers["Content-Disposition"] = "attachment; filename=revistas.csv"
+        output.headers["Content-type"] = "text/csv; charset=utf-8"
         return output
         
     filtered_records = query.count()
