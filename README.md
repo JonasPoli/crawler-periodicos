@@ -110,6 +110,43 @@ venv/bin/python3 run_fast.py super --workers 4
 ```
 *(Ajuste o número de `--workers` conforme a capacidade da sua máquina para acelerar o processo).*
 
+## 📏 Tamanho dos periódicos (antes de processar)
+
+O `journal_sizer.py` mede quantas edições e artigos cada periódico tem **direto no site**, sem baixar nada. Serve de base para estimar quantos e-mails um periódico deve render (`artigos no site × média de e-mails por PDF do sistema`).
+
+Estratégias, das mais baratas às mais caras (vence a primeira que responder):
+- **OJS:** sitemap (`/sitemap`, exato) → OAI-PMH (`/oai`, exato) → arquivo de edições + contagem dos sumários (todos, ou amostra quando há mais de 40 edições).
+- **SciELO:** API ArticleMeta pelo ISSN (exato) → `/grid` + contagem dos sumários.
+- **Último recurso** (site fora do ar ou atrás de desafio anti-bot, como o Cloudflare): total de DOIs no Crossref, pelo ISSN ou pelo título exato (estimado).
+
+Só entra na conta o que pertence ao periódico cadastrado: links para outros periódicos (do mesmo site ou de fora) são ignorados, assim como na média de e-mails por PDF, que usa apenas PDFs do próprio periódico.
+
+Quando roda:
+- **Ao cadastrar** um periódico pelo painel (ou ao mudar a URL/tipo), em segundo plano.
+- **Ao rodar** `populate_db.py`, para os periódicos ainda sem medição.
+- **Varredura geral**, pela linha de comando ou pelo painel (**Tamanho dos Periódicos**):
+  ```bash
+  venv/bin/python journal_sizer.py --all                # todos os periódicos ativos
+  venv/bin/python journal_sizer.py --missing            # só os que ainda não têm medição válida
+  venv/bin/python journal_sizer.py --stale-days 30      # medição válida mais velha que 30 dias
+  venv/bin/python journal_sizer.py --id 129 --dry-run   # mede e mostra, sem gravar
+  venv/bin/python journal_sizer.py --all --full         # sem amostragem nos sumários
+  ```
+
+As medições ficam na tabela `journal_size_estimates` (histórico: uma linha por medição, com o detalhe de cada estratégia em JSON).
+
+**Anti-bot:** quando nada do site responde sem desafio/bloqueio (Cloudflare, Sucuri, Imperva, DDoS-Guard, AWS WAF, captcha), a medição grava `blocked_by` e o periódico aparece como *bloqueado: extração impossível*. O tamanho, nesse caso, vem do Crossref.
+
+### Relatório de cobertura (painel → Tamanho dos Periódicos → Exportar CSV)
+
+`journal_report.py` cruza a medição do site com o banco e mostra, por periódico e no total: artigos no site, analisados, sem PDF, com erro, na fila, não descobertos e a analisar; e-mails encontrados, únicos e válidos; e-mails supostos, ainda a extrair e não extraíveis (por anti-bot e por falta de PDF). O CSV sai em `/journals/sizes?export=csv`, com uma linha `TOTAL` no fim.
+
+Regras das contagens do banco:
+- Só entram artigos do próprio periódico (URL sob a raiz cadastrada ou sob a raiz onde o site publica de fato, por exemplo o domínio novo após uma migração).
+- Cada artigo conta uma vez, pelo id (ignora galé, `/abstract/`, `?lang=` e http/https/www).
+- *Analisado* = PDF processado (`completed`) ou artigo que já tem e-mails. O `reset_journal_for_rerun` volta artigos processados para `found` sem apagar os e-mails; os que foram processados sem e-mail aparecem como *na fila*, porque serão reprocessados.
+- *E-mails encontrados* somam os e-mails de cada artigo, na mesma unidade das estimativas. *Únicos* e *válidos* contam endereços distintos.
+
 ## 🗃️ Importação da Nota Qualis
 
 Se precisar atualizar as avaliações Qualis dos periódicos da base, substitua o arquivo da plataforma Sucupira Excel (ex: `sucupira.xlsx`) na pasta `docs/` e crie/rode um script de atualização semelhante ao `import_qualis.py` (ou acesse a rota do admin painel pertinente caso ela exista no futuro) para cruzar automaticamente pelo ISSN.

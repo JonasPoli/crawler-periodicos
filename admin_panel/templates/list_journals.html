@@ -10,7 +10,9 @@
     <div>
         <span class="badge bg-secondary me-2">Total: {{ total_records }}</span>
         <span class="badge bg-info me-2 text-dark">Filtrados: {{ filtered_records }}</span>
-        <span class="badge bg-primary">Na página: {{ journals|length }}</span>
+        <span class="badge bg-primary me-2">Na página: {{ journals|length }}</span>
+        <span class="badge bg-success"
+            title="E-mails distintos entre os periódicos filtrados (um e-mail presente em vários periódicos conta uma vez)">E-mails únicos: {{ unique_emails_total }}</span>
     </div>
     <button type="button" class="btn btn-sm btn-success" onclick="exportCsv()">
         <i class="fas fa-file-csv"></i> Exportar CSV

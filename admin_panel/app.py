@@ -9,6 +9,8 @@ import io
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
 from database import get_session, Journal, Article, File, CapturedEmail, Author, Edition, ExecutionRun, ErrorLog
+from journal_sizer import enqueue_measurement, background_status, ensure_schema, journals_needing_measurement
+from journal_report import build_report, report_csv
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Change this in production
@@ -166,6 +168,20 @@ def download_file(id):
         
     return send_file(abs_path, as_attachment=True)
 
+# E-mail normalizado (minúsculas e sem espaços) para que variações do mesmo endereço contem uma vez só
+normalized_email = func.lower(func.trim(CapturedEmail.email))
+
+def journal_unique_email_counts(session, journal_ids):
+    """Retorna {journal_id: quantidade de e-mails únicos} para os periódicos informados."""
+    counts = session.query(
+        Edition.journal_id,
+        func.count(func.distinct(normalized_email))
+    ).join(Article, Article.edition_id == Edition.id)\
+     .join(CapturedEmail, CapturedEmail.article_id == Article.id)\
+     .filter(Edition.journal_id.in_(journal_ids))\
+     .group_by(Edition.journal_id).all()
+    return dict(counts)
+
 @app.route('/journals')
 def list_journals():
     page = request.args.get('page', 1, type=int)
@@ -202,6 +218,7 @@ def list_journals():
     if export == 'csv':
         # Export all matching (without pagination)
         all_journals = query.order_by(Journal.name).all()
+        email_counts = journal_unique_email_counts(session, query.with_entities(Journal.id).statement)
         
         import io
         import csv
@@ -209,7 +226,7 @@ def list_journals():
         si = io.StringIO()
         si.write('\ufeff')
         cw = csv.writer(si)
-        cw.writerow(['issn', 'title', 'qualis', 'area'])
+        cw.writerow(['issn', 'title', 'qualis', 'area', 'emails'])
         for j in all_journals:
             # Resolve ISSN
             issn_candidates = []
@@ -226,7 +243,7 @@ def list_journals():
             area_val = (j.subject_area or '').strip()
             if area_val.lower() in ['none', 'nan']:
                 area_val = ''
-            cw.writerow([issn_val, title_val, qualis_val, area_val])
+            cw.writerow([issn_val, title_val, qualis_val, area_val, email_counts.get(j.id, 0)])
         
         output = make_response(si.getvalue())
         output.headers["Content-Disposition"] = "attachment; filename=revistas.csv"
@@ -236,29 +253,22 @@ def list_journals():
     filtered_records = query.count()
     journals = query.order_by(Journal.name).limit(per_page).offset((page - 1) * per_page).all()
     
-    # Calculate emails amount
-    if journals:
-        from sqlalchemy import func
-        from database import Edition, Article, CapturedEmail
-        journal_ids = [j.id for j in journals]
-        counts = session.query(
-            Journal.id,
-            func.count(func.distinct(CapturedEmail.email))
-        ).outerjoin(Edition, Edition.journal_id == Journal.id)\
-         .outerjoin(Article, Article.edition_id == Edition.id)\
-         .outerjoin(CapturedEmail, CapturedEmail.article_id == Article.id)\
-         .filter(Journal.id.in_(journal_ids))\
-         .group_by(Journal.id).all()
-         
-        count_dict = dict(counts)
-        for j in journals:
-            j.email_count = count_dict.get(j.id, 0)
-    else:
-        for j in journals:
-            j.email_count = 0
+    # Calculate emails amount (unique per journal)
+    count_dict = journal_unique_email_counts(session, [j.id for j in journals]) if journals else {}
+    for j in journals:
+        j.email_count = count_dict.get(j.id, 0)
+    
+    # Unique emails across all filtered journals (an email found in several journals counts once)
+    unique_emails_total = session.query(func.count(func.distinct(normalized_email)))\
+        .select_from(CapturedEmail)\
+        .join(Article, CapturedEmail.article_id == Article.id)\
+        .join(Edition, Article.edition_id == Edition.id)\
+        .filter(Edition.journal_id.in_(query.with_entities(Journal.id).statement))\
+        .scalar() or 0
     
     return render_template('list_journals.html', journals=journals, page=page, total=filtered_records, per_page=per_page,
                            total_records=total_records, filtered_records=filtered_records,
+                           unique_emails_total=unique_emails_total,
                            f_name=f_name, f_source=f_source, f_status=f_status, f_qualis=f_qualis)
 
 @app.route('/journals/create', methods=['GET', 'POST'])
@@ -285,6 +295,8 @@ def create_journal():
         )
         session.add(new_journal)
         session.commit()
+        # Mede edições/artigos no site em segundo plano, antes de qualquer processamento
+        enqueue_measurement([new_journal.id])
         return redirect(url_for('list_journals'))
     return render_template('form_journal.html', journal=None)
 
@@ -296,6 +308,7 @@ def edit_journal(id):
         return "Journal not found", 404
         
     if request.method == 'POST':
+        url_changed = (journal.url, journal.source_type) != (request.form['url'], request.form['source_type'])
         journal.name = request.form['name']
         journal.url = request.form['url']
         journal.acronym = request.form.get('acronym')
@@ -313,8 +326,10 @@ def edit_journal(id):
         journal.issn_electronic = request.form.get('issn_electronic')
         journal.qualis = request.form.get('qualis')
         journal.subject_area = request.form.get('subject_area')
-        
+
         session.commit()
+        if url_changed:
+            enqueue_measurement([journal.id])
         return redirect(url_for('list_journals'))
     
     # Get articles for this journal
@@ -330,6 +345,40 @@ def delete_journal(id):
         session.delete(journal)
         session.commit()
     return redirect(url_for('list_journals'))
+
+# --- TAMANHO DOS PERIÓDICOS (medido no site, antes do processamento) ---
+
+@app.route('/journals/sizes')
+def journal_sizes():
+    ensure_schema()
+    report = build_report(get_db(), refresh=request.args.get('refresh') == '1')
+
+    if request.args.get('export') == 'csv':
+        output = make_response(report_csv(report))
+        output.headers["Content-Disposition"] = "attachment; filename=cobertura_periodicos.csv"
+        output.headers["Content-type"] = "text/csv; charset=utf-8"
+        return output
+
+    return render_template('journal_sizes.html', bg=background_status(), **report)
+
+@app.route('/journals/sizes/measure', methods=['POST'])
+def measure_journal_sizes():
+    ensure_schema()
+    session = get_db()
+    journal_id = request.form.get('journal_id', type=int)
+    if journal_id:
+        ids = [journal_id]
+    elif request.form.get('scope') == 'missing':
+        ids = journals_needing_measurement(session)
+    else:
+        ids = [row[0] for row in session.query(Journal.id).filter(Journal.active == True).all()]
+
+    if ids:
+        enqueue_measurement(ids)
+        flash(f"{len(ids)} periódico(s) enviados para medição em segundo plano.")
+    else:
+        flash("Nenhum periódico precisa de medição.")
+    return redirect(url_for('journal_sizes'))
 
 # --- ARTICLES ---
 @app.route('/articles')
@@ -619,8 +668,43 @@ def report_emails_multi_journal():
     export = request.args.get('export')
     
     emails = []
+    summary_stats = {
+        'total': 0,
+        'valid': 0,
+        'invalid': 0,
+        'unknown': 0,
+        'accept_all': 0,
+        'pending': 0,
+        'deliverability': 0
+    }
     
     if journal_ids:
+        # Aggregate summary statistics
+        stats_query = session.query(
+            CapturedEmail.verification_status,
+            func.count(func.distinct(CapturedEmail.email))
+        ).join(Article, CapturedEmail.article_id == Article.id)\
+         .join(Edition, Article.edition_id == Edition.id)\
+         .filter(Edition.journal_id.in_(journal_ids))\
+         .group_by(CapturedEmail.verification_status).all()
+        
+        for st_val, cnt in stats_query:
+            st = (st_val or 'PENDING').upper()
+            if st == 'VALID':
+                summary_stats['valid'] = cnt
+            elif st == 'INVALID':
+                summary_stats['invalid'] = cnt
+            elif st == 'ACCEPT_ALL':
+                summary_stats['accept_all'] = cnt
+            elif st == 'UNKNOWN':
+                summary_stats['unknown'] = cnt
+            else:
+                summary_stats['pending'] += cnt
+            summary_stats['total'] += cnt
+            
+        if summary_stats['total'] > 0:
+            summary_stats['deliverability'] = round((summary_stats['valid'] / summary_stats['total']) * 100, 1)
+
         query = session.query(CapturedEmail)\
             .join(Article, CapturedEmail.article_id == Article.id)\
             .join(Edition, Article.edition_id == Edition.id)\
@@ -645,7 +729,102 @@ def report_emails_multi_journal():
             
             output = make_response(si.getvalue())
             output.headers["Content-Disposition"] = "attachment; filename=emails_multi_journal.csv"
-            output.headers["Content-type"] = "text/csv"
+            output.headers["Content-type"] = "text/csv; charset=utf-8"
+            return output
+            
+        elif export == 'neverbounce':
+            emails = query.all()
+            si = io.StringIO()
+            cw = csv.writer(si)
+            cw.writerow([
+                'email', 'status', 'result', 'reason', 'normalized_reason',
+                'syntax', 'has_domain', 'has_mx', 'smtp_valid',
+                'provider', 'confidence_score', 'journal_id', 'journal_name',
+                'article_id', 'article_title', 'checked_at'
+            ])
+            for email in emails:
+                j_id = email.article.edition.journal.id if (email.article and email.article.edition and email.article.edition.journal) else ''
+                j_name = email.article.edition.journal.name if (email.article and email.article.edition and email.article.edition.journal) else ''
+                art_id = email.article.id if email.article else ''
+                art_title = email.article.title if email.article else ''
+                
+                status_raw = (email.verification_status or 'PENDING').upper()
+                domain = email.email.split('@')[-1].lower() if '@' in email.email else ''
+                
+                if any(g in domain for g in ['gmail', 'google']):
+                    provider = 'GOOGLE'
+                elif any(m in domain for m in ['outlook', 'hotmail', 'live', 'office365', 'microsoft']):
+                    provider = 'MICROSOFT'
+                elif any(y in domain for y in ['yahoo', 'ymail']):
+                    provider = 'YAHOO'
+                elif any(u in domain for u in ['edu.br', 'usp.br', 'unicamp.br', 'unesp.br', 'uf', 'gov.br', 'unb.br', 'ufrj.br', 'ufrgs.br']):
+                    provider = 'ACADEMIC_INSTITUTION'
+                else:
+                    provider = 'CORPORATE_OTHER'
+                
+                if status_raw == 'VALID':
+                    result = 'Valid'
+                    reason = '250 OK - Recipient accepted by mail server'
+                    norm_reason = 'accepted_recipient'
+                    confidence = 95 if provider == 'GOOGLE' else 85
+                elif status_raw == 'INVALID':
+                    result = 'Invalid'
+                    if email.valid_syntax is False:
+                        reason = 'Invalid email syntax format'
+                        norm_reason = 'syntax_error'
+                    elif email.valid_domain is False:
+                        reason = 'Domain does not exist (DNS lookup failed)'
+                        norm_reason = 'invalid_domain'
+                    elif email.valid_mx is False:
+                        reason = 'Domain has no active MX records'
+                        norm_reason = 'no_mx_records'
+                    elif email.valid_smtp is False:
+                        reason = '550 User Unknown / Mailbox does not exist'
+                        norm_reason = 'mailbox_not_found'
+                    else:
+                        reason = 'Address rejected by destination server'
+                        norm_reason = 'rejected_recipient'
+                    confidence = 0
+                elif status_raw == 'ACCEPT_ALL':
+                    result = 'Accept All (Catch-All)'
+                    reason = 'Server is catch-all (accepts all incoming emails)'
+                    norm_reason = 'catch_all_detected'
+                    confidence = 70
+                elif status_raw == 'UNKNOWN':
+                    result = 'Unknown'
+                    reason = 'Server connection timed out or policy blocked'
+                    norm_reason = 'connection_timeout_or_block'
+                    confidence = 40
+                else:
+                    result = 'Pending'
+                    reason = 'Verification pending'
+                    norm_reason = 'pending_check'
+                    confidence = 50
+                
+                checked_at = (email.updated_at or email.created_at).strftime('%Y-%m-%d %H:%M:%S') if (email.updated_at or email.created_at) else ''
+                
+                cw.writerow([
+                    email.email,
+                    status_raw,
+                    result,
+                    reason,
+                    norm_reason,
+                    email.valid_syntax if email.valid_syntax is not None else True,
+                    email.valid_domain if email.valid_domain is not None else True,
+                    email.valid_mx if email.valid_mx is not None else True,
+                    email.valid_smtp if email.valid_smtp is not None else '',
+                    provider,
+                    confidence,
+                    j_id,
+                    j_name,
+                    art_id,
+                    art_title,
+                    checked_at
+                ])
+                
+            output = make_response(si.getvalue())
+            output.headers["Content-Disposition"] = "attachment; filename=neverbounce_emails_report.csv"
+            output.headers["Content-type"] = "text/csv; charset=utf-8"
             return output
             
         emails = query.limit(1000).all()
@@ -654,7 +833,8 @@ def report_emails_multi_journal():
                            journals=journals, 
                            emails=emails, 
                            selected_journal_ids=journal_ids, 
-                           selected_status=status_filter)
+                           selected_status=status_filter,
+                           summary_stats=summary_stats)
 
 
 @app.route('/reports/emails_general')

@@ -1,0 +1,319 @@
+/*
+ * Impressão da página "Tamanho dos Periódicos" (/journals/sizes).
+ * A4 paisagem, sem menu/botões, indicadores em caixas com borda (fundos coloridos não saem
+ * na maioria das impressoras), tabela compacta com cabeçalho repetido em cada página.
+ */
+
+@page {
+    size: A4 landscape;
+    margin: 10mm 10mm 14mm;
+
+    /* Rodapé com numeração (Chrome 131+; outros navegadores ignoram) */
+    @bottom-left {
+        content: "Cobertura dos periódicos";
+        font: 7.5pt system-ui, sans-serif;
+        color: #6c757d;
+    }
+    @bottom-right {
+        content: "Página " counter(page) " de " counter(pages);
+        font: 7.5pt system-ui, sans-serif;
+        color: #6c757d;
+    }
+}
+
+/* ---------- Estrutura: some o painel, fica só o relatório ---------- */
+
+body {
+    padding: 0 !important;
+    font-size: 9pt;
+    color: #212529;
+    background: #fff !important;
+}
+
+.sidebar,
+.btn-toolbar,
+.alert,
+form,
+button,
+tr.collapse,
+.screen-only {
+    display: none !important;
+}
+
+.container-fluid,
+.container-fluid > .row {
+    padding: 0 !important;
+    margin: 0 !important;
+}
+
+main,
+.main-content {
+    width: 100% !important;
+    max-width: 100% !important;
+    flex: 0 0 100% !important;
+    margin: 0 !important;
+    padding: 0 !important;
+}
+
+a {
+    color: inherit !important;
+    text-decoration: none !important;
+}
+
+.shadow-sm {
+    box-shadow: none !important;
+}
+
+/* ---------- Cabeçalho ---------- */
+
+.border-bottom {
+    border-bottom: 2px solid #212529 !important;
+    padding: 0 0 2mm !important;
+    margin-bottom: 3mm !important;
+}
+
+h1.h2 {
+    font-size: 16pt;
+    margin: 0 !important;
+}
+
+h1.h2 .fa-ruler {
+    color: #212529 !important;
+}
+
+.print-meta {
+    font-size: 8pt;
+    color: #6c757d;
+    margin-top: 1mm;
+}
+
+p.small.text-muted {
+    font-size: 8pt;
+    margin-bottom: 3mm !important;
+}
+
+/* ---------- Indicadores (duas faixas de 4 caixas) ---------- */
+
+h6.text-uppercase {
+    font-size: 7.5pt;
+    letter-spacing: 0.06em;
+    margin: 0 0 1.5mm;
+}
+
+.kpi-row {
+    display: grid !important;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 3mm;
+    margin: 0 0 4mm !important;
+    break-inside: avoid;
+}
+
+.kpi-row > [class*="col-"] {
+    width: auto !important;
+    max-width: none !important;
+    padding: 0 !important;
+}
+
+.kpi-row .card {
+    background: #fff !important;
+    color: #212529 !important;
+    border: 1px solid #ced4da !important;
+    border-top-width: 4px !important;
+    border-radius: 2mm;
+    margin: 0 !important;
+    height: 100%;
+}
+
+.kpi-row .card-body {
+    padding: 2.5mm 3mm !important;
+}
+
+.kpi-row .card-title {
+    font-size: 7pt;
+    margin-bottom: 1mm;
+    color: #6c757d;
+    opacity: 1 !important;
+}
+
+.kpi-row h2 {
+    font-size: 15pt;
+    margin: 0;
+}
+
+.kpi-row small {
+    font-size: 7pt;
+    color: #6c757d;
+    opacity: 1 !important;
+}
+
+.kpi-row .fa-info-circle {
+    display: none;
+}
+
+/* A cor de cada caixa vira a borda de cima e o número */
+.kpi-row .bg-dark { border-top-color: #212529 !important; }
+.kpi-row .bg-success { border-top-color: #198754 !important; }
+.kpi-row .bg-success h2 { color: #146c43; }
+.kpi-row .bg-primary { border-top-color: #0d6efd !important; }
+.kpi-row .bg-primary h2 { color: #0a58ca; }
+.kpi-row .bg-info { border-top-color: #0aa2c0 !important; }
+.kpi-row .bg-info h2 { color: #087990; }
+.kpi-row .bg-danger { border-top-color: #dc3545 !important; }
+.kpi-row .bg-danger h2 { color: #b02a37; }
+
+/* ---------- Tabela ---------- */
+
+.card {
+    border: none !important;
+}
+
+.card-body.p-0 {
+    padding: 0 !important;
+}
+
+.table-responsive {
+    overflow: visible !important;
+}
+
+table.table {
+    width: 100%;
+    font-size: 7.5pt;
+    border-collapse: collapse;
+    margin: 0;
+}
+
+/* Cabeçalho repetido em cada página, e linhas nunca partidas entre páginas */
+thead {
+    display: table-header-group;
+}
+
+tr {
+    break-inside: avoid;
+}
+
+table.table > thead > tr > th {
+    background: #e9ecef !important;
+    color: #212529;
+    font-size: 6.5pt;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    border-top: 1px solid #adb5bd;
+    border-bottom: 1.5px solid #212529;
+    padding: 1.5mm 1.5mm;
+    vertical-align: bottom;
+    white-space: nowrap;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+table.table > tbody > tr > td {
+    padding: 1.2mm 1.5mm;
+    border-bottom: 0.5px solid #dee2e6;
+    box-shadow: none !important;
+    vertical-align: top;
+}
+
+/* Zebra discreta para acompanhar a linha no papel */
+table.table > tbody > tr.zebra > td {
+    background: #f8f9fa !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+table.table td .small,
+table.table td small {
+    font-size: 6.5pt;
+}
+
+/* "não extraível" numa linha só */
+table.table td .text-danger {
+    white-space: nowrap;
+}
+
+/* Coluna do periódico larga; números estreitos */
+table.table th:nth-child(1), table.table td:nth-child(1) { width: 4%; color: #6c757d; }
+table.table th:nth-child(2), table.table td:nth-child(2) { width: 30%; }
+
+/* Revistas com anti-bot: faixa vermelha à esquerda e fundo rosado */
+tr.table-danger > td {
+    background: #fbe7e9 !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+tr.table-danger > td:first-child {
+    border-left: 3px solid #dc3545;
+}
+
+/* Etiquetas em contorno (economizam tinta e continuam legíveis em P&B) */
+.badge {
+    background: transparent !important;
+    color: #495057 !important;
+    border: 0.75px solid #adb5bd !important;
+    font-size: 6pt;
+    font-weight: 600;
+    padding: 0.4mm 1mm;
+}
+
+.badge.bg-danger {
+    color: #b02a37 !important;
+    border-color: #dc3545 !important;
+}
+
+/* Qualis em destaque (etiqueta mais escura que a da plataforma) */
+.badge.qualis {
+    color: #0a3d91 !important;
+    border-color: #0a58ca !important;
+    font-weight: 700;
+}
+
+.badge.qualis-none {
+    color: #adb5bd !important;
+    border-color: #dee2e6 !important;
+    font-weight: 400;
+}
+
+/* Barra de progresso com as cores reais */
+.progress {
+    height: 3px !important;
+    margin: 0.5mm 0;
+    background: #e9ecef !important;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+.progress-bar {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+}
+
+/* Ícones que só faziam sentido com o mouse (tooltips) */
+.fa-exclamation-triangle,
+.fa-info-circle {
+    display: none;
+}
+
+.print-warnings {
+    font-size: 6.5pt;
+    font-style: italic;
+    color: #8a6d00;
+    margin-top: 0.5mm;
+}
+
+/* ---------- Legenda ---------- */
+
+.print-legend {
+    margin-top: 4mm;
+    padding-top: 2mm;
+    border-top: 1px solid #adb5bd;
+    font-size: 7pt;
+    color: #495057;
+    columns: 2;
+    column-gap: 8mm;
+    break-inside: avoid;
+}
+
+.print-legend p {
+    margin: 0 0 1mm;
+    break-inside: avoid;
+}

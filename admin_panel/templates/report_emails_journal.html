@@ -1,23 +1,29 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="mb-4">Relatório: E-mails por Periódico</h2>
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h2 class="mb-1"><i class="fas fa-envelope-open-text text-primary me-2"></i>Relatório: E-mails por Periódico</h2>
+        <p class="text-muted mb-0">Pesquise pelo periódico desejado e filtre os e-mails capturados por status de validação.</p>
+    </div>
+</div>
 
 <div class="card shadow-sm mb-4">
     <div class="card-body">
-        <form method="GET" class="row g-3">
+        <form method="GET" class="row g-3" id="filterForm">
             <div class="col-md-6">
-                <label for="journal_id" class="form-label">Periódico</label>
-                <select class="form-select" id="journal_id" name="journal_id" onchange="this.form.submit()">
-                    <option value="">Selecione um periódico...</option>
+                <label for="journal_id" class="form-label fw-bold">Periódico</label>
+                <select class="form-select" id="journal_id" name="journal_id" placeholder="Digite para pesquisar o periódico...">
+                    <option value="">Selecione ou pesquise um periódico...</option>
                     {% for j in journals %}
-                    <option value="{{ j.id }}" {{ 'selected' if selected_journal_id==j.id else '' }}>[{{ j.id }}] {{ j.name }}
+                    <option value="{{ j.id }}" {{ 'selected' if selected_journal_id==j.id else '' }}>
+                        [{{ j.id }}] {{ j.name }}
                     </option>
                     {% endfor %}
                 </select>
             </div>
             <div class="col-md-4">
-                <label for="status" class="form-label">Status</label>
+                <label for="status" class="form-label fw-bold">Status</label>
                 <select class="form-select" id="status" name="status">
                     <option value="">Todos</option>
                     <option value="PENDING" {{ 'selected' if selected_status=='PENDING' else '' }}>Pending</option>
@@ -26,17 +32,24 @@
                 </select>
             </div>
             <div class="col-md-2 d-flex align-items-end">
-                <button type="submit" class="btn btn-primary w-100">Filtrar</button>
+                <button type="submit" class="btn btn-primary w-100">
+                    <i class="fas fa-search me-1"></i> Filtrar
+                </button>
             </div>
         </form>
     </div>
 </div>
 
 {% if selected_journal_id %}
-<div class="d-flex justify-content-end mb-3">
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h5 class="mb-0">
+            Total de e-mails encontrados: <span class="badge bg-primary fs-6">{{ emails|length }}</span>
+        </h5>
+    </div>
     <a href="{{ url_for('report_emails_by_journal', journal_id=selected_journal_id, status=selected_status, export='csv') }}"
         class="btn btn-success">
-        <i class="fas fa-file-csv"></i> Exportar CSV
+        <i class="fas fa-file-csv me-1"></i> Exportar CSV
     </a>
 </div>
 
@@ -59,14 +72,14 @@
                         <td>{{ email.email }}</td>
                         <td>
                             <span
-                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else 'secondary' }}">
+                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else ('danger' if email.verification_status == 'INVALID' else 'secondary') }}">
                                 {{ email.verification_status }}
                             </span>
                         </td>
                         <td>
                             {% if email.article %}
                             <a href="{{ url_for('edit_article', id=email.article.id) }}">
-                                {{ email.article.title[:50] }}...
+                                {{ email.article.title[:80] }}...
                             </a>
                             {% else %}
                             -
@@ -75,7 +88,7 @@
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4">Nenhum e-mail encontrado para este filtro.</td>
+                        <td colspan="4" class="text-center py-3 text-muted">Nenhum e-mail encontrado para este filtro.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -84,4 +97,30 @@
     </div>
 </div>
 {% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const journalSelect = document.getElementById('journal_id');
+        if (journalSelect) {
+            new TomSelect(journalSelect, {
+                create: false,
+                sortField: {
+                    field: "text",
+                    direction: "asc"
+                },
+                placeholder: "Digite para pesquisar pelo nome ou ID...",
+                allowEmptyOption: true,
+                maxOptions: 500,
+                plugins: ['clear_button'],
+                onChange: function(value) {
+                    if (value) {
+                        document.getElementById('filterForm').submit();
+                    }
+                }
+            });
+        }
+    });
+</script>
 {% endblock %}

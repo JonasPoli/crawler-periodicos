@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% macro num(n) -%}
+{{ '-' if n is none else '{:,}'.format(n).replace(',', '.') }}
+{%- endmacro %}
+
+{% macro pct(p) -%}
+{{ '-' if p is none else ('%.1f'|format(p)).replace('.', ',') ~ '%' }}
+{%- endmacro %}
+
+{% set method_labels = {
+    'sitemap': 'Sitemap',
+    'oai': 'OAI-PMH',
+    'articlemeta': 'ArticleMeta',
+    'archive_full': 'Sumários (todos)',
+    'archive_sample': 'Sumários (amostra)',
+    'crossref': 'Crossref (DOIs)',
+    'grid': 'Grid de edições',
+    'archive_issues': 'Arquivo de edições',
+    'archive': 'Sumários'
+} %}
+
+{% block head %}
+<link rel="stylesheet" media="print" href="{{ url_for('static', filename='css/journal_sizes_print.css') }}">
+{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div>
+        <h1 class="h2 mb-1"><i class="fas fa-ruler me-2 text-primary"></i> Tamanho dos Periódicos</h1>
+        <p class="text-muted mb-0">O que cada site tem, o que já analisamos, o que ainda dá para extrair e o que não dá.</p>
+        <div class="print-meta d-none d-print-block">Impresso em <span id="print-date"></span></div>
+    </div>
+    <div class="btn-toolbar gap-2 mb-2 mb-md-0">
+        <button type="button" class="btn btn-sm btn-outline-dark" onclick="window.print()">
+            <i class="fas fa-print me-1"></i> Imprimir
+        </button>
+        <a href="{{ url_for('journal_sizes', export='csv') }}" class="btn btn-sm btn-success">
+            <i class="fas fa-file-csv me-1"></i> Exportar CSV
+        </a>
+        <a href="{{ url_for('journal_sizes', refresh=1) }}" class="btn btn-sm btn-outline-secondary"
+            title="Recalcula agora os números do banco (normalmente atualizados a cada 5 minutos)">
+            <i class="fas fa-sync-alt me-1"></i> Atualizar números
+        </a>
+        <form method="POST" action="{{ url_for('measure_journal_sizes') }}">
+            <input type="hidden" name="scope" value="missing">
+            <button type="submit" class="btn btn-sm btn-outline-primary" {{ 'disabled' if bg.running }}>
+                <i class="fas fa-play me-1"></i> Medir não medidos
+            </button>
+        </form>
+        <form method="POST" action="{{ url_for('measure_journal_sizes') }}"
+            onsubmit="return confirm('Medir novamente todos os periódicos ativos?');">
+            <input type="hidden" name="scope" value="all">
+            <button type="submit" class="btn btn-sm btn-primary" {{ 'disabled' if bg.running }}>
+                <i class="fas fa-ruler me-1"></i> Medir todos
+            </button>
+        </form>
+    </div>
+</div>
+
+{% for message in get_flashed_messages() %}
+<div class="alert alert-info py-2">{{ message }}</div>
+{% endfor %}
+
+{% if bg.running %}
+<div class="alert alert-warning d-flex align-items-center py-2">
+    <div class="spinner-border spinner-border-sm me-2" role="status"></div>
+    Medição em andamento: {{ bg.done }} de {{ bg.total }} periódico(s). A página atualiza sozinha.
+</div>
+{% endif %}
+
+<p class="small text-muted mb-3">
+    {{ totals.journals }} periódicos · {{ totals.measured }} medidos ·
+    <span class="text-danger fw-bold">{{ totals.blocked }} bloqueados por anti-bot</span> ·
+    {{ totals.failed }} com falha na medição · {{ totals.missing }} sem medição.
+    Números do banco de {{ coverage_at.strftime('%d/%m/%Y %H:%M') }} (UTC), contando só artigos do próprio periódico e sem duplicatas.
+</p>
+
+<h6 class="text-uppercase text-muted small fw-bold">Artigos</h6>
+<div class="row mb-2 kpi-row">
+    <div class="col-md-3">
+        <div class="card bg-dark text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Nos sites</h6>
+                <h2 class="card-text fw-bold mb-0">{{ num(totals.articles_site) }}</h2>
+                <small class="opacity-75">soma dos {{ totals.measured }} periódicos medidos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Já analisados</h6>
+                <h2 class="card-text fw-bold mb-0">{{ num(totals.analyzed) }}</h2>
+                <small class="opacity-75">+ {{ num(totals.no_pdf) }} sem PDF · {{ pct(totals.progress) }} dos sites concluídos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">A analisar</h6>
+                <h2 class="card-text fw-bold mb-0">{{ num(totals.to_analyze - totals.blocked_articles) }}</h2>
+                <small class="opacity-75">extraíveis · {{ num(totals.not_discovered) }} ainda não descobertos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Não dá para extrair</h6>
+                <h2 class="card-text fw-bold mb-0">{{ num(totals.blocked_articles) }}</h2>
+                <small class="opacity-75">artigos em {{ totals.blocked }} revista(s) com anti-bot</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<h6 class="text-uppercase text-muted small fw-bold">E-mails</h6>
+<div class="row mb-4 kpi-row">
+    <div class="col-md-3">
+        <div class="card bg-success text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Encontrados</h6>
+                <h2 class="card-text fw-bold mb-0">{{ num(totals.emails_found) }}</h2>
+                <small class="opacity-75"
+                    title="Encontrados = soma por artigo (mesma unidade das estimativas). Únicos e válidos = endereços distintos entre todas as revistas.">
+                    {{ num(totals.emails_unique) }} únicos · {{ num(totals.emails_valid) }} válidos <i class="fas fa-info-circle"></i>
+                </small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-info text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Supostos nos sites</h6>
+                <h2 class="card-text fw-bold mb-0">{{ num(totals.emails_expected) }}</h2>
+                {% if avg %}
+                <small class="opacity-75"
+                    title="Artigos no site × média do sistema. Média só com PDFs do próprio periódico ({{ num(avg.pdfs) }} PDFs), cada PDF limitado a {{ avg.cap }} e-mails (percentil 99). Média bruta: {{ '%.2f'|format(avg.mean) }}.">
+                    média {{ ('%.2f'|format(avg.mean_capped)).replace('.', ',') }} e-mails/PDF <i class="fas fa-info-circle"></i>
+                </small>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Ainda a extrair</h6>
+                <h2 class="card-text fw-bold mb-0">~{{ num(totals.emails_to_extract) }}</h2>
+                <small class="opacity-75">estimados nos artigos extraíveis a analisar</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-danger text-white mb-3 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75">Não extraíveis</h6>
+                <h2 class="card-text fw-bold mb-0">~{{ num(totals.emails_lost) }}</h2>
+                <small class="opacity-75">{{ num(totals.emails_lost_antibot) }} por anti-bot · {{ num(totals.emails_lost_no_pdf) }} sem PDF</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover mb-0 align-middle">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th>
+                        <th>Periódico</th>
+                        <th class="text-end">Artigos no site</th>
+                        <th style="min-width: 150px;">Analisados</th>
+                        <th class="text-end">A analisar</th>
+                        <th class="text-end">E-mails encontrados</th>
+                        <th class="text-end">Supostos</th>
+                        <th class="text-end">A extrair</th>
+                        <th class="d-print-none"></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for row in rows %}
+                    {% set est = row.est %}
+                    <tr class="{{ 'table-danger' if row.blocked_by }} {{ 'text-muted' if not row.journal.active }} {{ 'zebra' if loop.index is even }}">
+                        <td>{{ row.journal.id }}</td>
+                        <td>
+                            <a href="{{ url_for('edit_journal', id=row.journal.id) }}">{{ row.journal.name }}</a>
+                            {% set qualis = (row.journal.qualis or '')|trim|upper %}
+                            {% if qualis %}
+                            <span class="badge qualis ms-1 {{ 'bg-primary' if qualis.startswith('A') else ('bg-info text-dark' if qualis.startswith('B') else 'bg-secondary') }}"
+                                title="Qualis CAPES">Qualis {{ qualis }}</span>
+                            {% else %}
+                            <span class="badge qualis qualis-none ms-1 bg-light text-muted border" title="Qualis CAPES">sem Qualis</span>
+                            {% endif %}
+                            <span class="badge bg-light text-dark border ms-1">{{ (est.platform if est else row.journal.source_type)|upper }}</span>
+                            {% if not row.journal.active %}<span class="badge bg-secondary ms-1">Inativo</span>{% endif %}
+                            {% if row.blocked_by %}
+                            <div><span class="badge bg-danger" title="O site responde com desafio/bloqueio anti-bot: o crawler não consegue extrair">
+                                <i class="fas fa-shield-alt me-1"></i>Anti-bot ({{ row.blocked_by }}): extração impossível</span></div>
+                            {% endif %}
+                            {% if row.warnings %}
+                            <i class="fas fa-exclamation-triangle text-warning ms-1"
+                                title="{{ row.warnings|join(' | ') }}"></i>
+                            <div class="print-warnings d-none d-print-block">Aviso: {{ row.warnings|join(' · ') }}</div>
+                            {% endif %}
+                        </td>
+                        <td class="text-end">
+                            {% if row.articles_site is not none %}
+                            <span class="fw-bold">{{ num(row.articles_site) }}</span>
+                            <div class="small text-muted text-nowrap">
+                                {% set archive = row.details.strategies.archive if row.details.strategies else none %}
+                                {{ method_labels.get(est.method, est.method) }} ·
+                                {% if row.site_exact %}exato{% elif archive and archive.margin is defined %}±{{ num(archive.margin) }}{% else %}estimado{% endif %}
+                                {% if est.issues_count %}· {{ num(est.issues_count) }} edições{% endif %}
+                            </div>
+                            {% elif est is not none %}
+                            <span class="badge bg-danger">Falhou</span>
+                            <div class="small text-muted text-start" style="max-width: 320px; white-space: normal;">
+                                {% for part in est.error.split('; ') %}<div>{{ part }}</div>{% endfor %}
+                            </div>
+                            {% elif not row.journal.active %}
+                            <span class="text-muted small" title="A varredura geral (Medir todos / --all) só mede periódicos ativos. Use o botão de medir desta linha.">
+                                inativo · não medido <i class="fas fa-info-circle"></i></span>
+                            {% else %}
+                            <span class="text-muted small">não medido</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <span class="fw-bold">{{ num(row.analyzed) }}</span>
+                            {% if row.progress is not none %}<small class="text-muted">{{ pct(row.progress) }}</small>{% endif %}
+                            {% if row.progress is not none %}
+                            <div class="progress" style="height: 5px;">
+                                <div class="progress-bar {{ 'bg-danger' if row.blocked_by else 'bg-success' }}" style="width: {{ row.progress }}%"></div>
+                            </div>
+                            {% endif %}
+                            <div class="small text-muted text-nowrap">sem PDF {{ num(row.no_pdf) }} · erro {{ num(row.errors) }}</div>
+                        </td>
+                        <td class="text-end">
+                            {{ num(row.to_analyze) }}
+                            <div class="small text-muted text-nowrap">fila {{ num(row.queued) }}{% if row.not_discovered is not none %} · não descobertos {{ num(row.not_discovered) }}{% endif %}</div>
+                        </td>
+                        <td class="text-end">
+                            {{ num(row.emails_found) }}
+                            <div class="small text-muted text-nowrap">{{ num(row.emails_unique) }} únicos · {{ num(row.emails_valid) }} válidos</div>
+                        </td>
+                        <td class="text-end">{% if row.emails_expected is not none %}~{{ num(row.emails_expected) }}{% else %}-{% endif %}</td>
+                        <td class="text-end">
+                            {% if row.blocked_by %}
+                            <span class="text-danger small fw-bold">não extraível</span>
+                            <div class="small text-danger">~{{ num(row.emails_lost_antibot) }}</div>
+                            {% else %}
+                            ~{{ num(row.emails_to_extract) }}
+                            {% endif %}
+                        </td>
+                        <td class="text-nowrap d-print-none">
+                            {% if row.details.strategies %}
+                            <button class="btn btn-sm btn-outline-secondary" type="button" data-bs-toggle="collapse"
+                                data-bs-target="#size-details-{{ row.journal.id }}" title="Detalhes da medição">
+                                <i class="fas fa-list"></i>
+                            </button>
+                            {% endif %}
+                            <form method="POST" action="{{ url_for('measure_journal_sizes') }}" class="d-inline">
+                                <input type="hidden" name="journal_id" value="{{ row.journal.id }}">
+                                <button type="submit" class="btn btn-sm btn-outline-primary" title="Medir agora">
+                                    <i class="fas fa-ruler"></i>
+                                </button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% if row.details.strategies %}
+                    <tr class="collapse" id="size-details-{{ row.journal.id }}">
+                        <td></td>
+                        <td colspan="8" class="bg-light small">
+                            <div class="mb-1 text-muted">Medido em {{ est.measured_at.strftime('%d/%m/%Y %H:%M') }} (UTC)
+                                · base {{ row.details.base_url }} · {{ est.requests_count }} requisições
+                                · {{ '%.1f'|format(est.duration_seconds or 0) }}s
+                                {% if est.confidence %}· confiança {{ est.confidence }}{% endif %}</div>
+                            <ul class="mb-1">
+                                {% for name, out in row.details.strategies.items() %}
+                                <li>
+                                    <strong>{{ method_labels.get(name, name) }}:</strong>
+                                    {% if out.error %}
+                                    <span class="text-danger">{{ out.error }}</span>
+                                    {% else %}
+                                    {% if out.articles is defined %}{{ num(out.articles) }} artigos{% endif %}
+                                    {% if out.issues is defined and out.issues is not none %} · {{ num(out.issues) }} edições{% endif %}
+                                    {% if out.issues_read is defined %} · {{ out.issues_read }} sumários lidos (média {{ out.mean_per_issue }}/edição){% endif %}
+                                    {% if out.issn is defined %} · ISSN {{ out.issn }}{% endif %}
+                                    {% if out.pages is defined %} · {{ out.pages }} página(s){% endif %}
+                                    {% endif %}
+                                    <span class="text-muted">({{ out.requests }} req, {{ out.seconds }}s)</span>
+                                </li>
+                                {% endfor %}
+                            </ul>
+                            {% for w in row.warnings %}
+                            <div class="text-warning-emphasis"><i class="fas fa-exclamation-triangle me-1"></i>{{ w }}</div>
+                            {% endfor %}
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="print-legend d-none d-print-block">
+    <p><strong>Artigos no site:</strong> contados direto no site (sitemap, OAI-PMH, API do SciELO ou sumários das edições); "estimado" quando veio de amostra ou do Crossref.</p>
+    <p><strong>Analisados:</strong> artigos do próprio periódico com PDF processado ou com e-mails já capturados, sem duplicatas.</p>
+    <p><strong>A analisar:</strong> artigos do site menos os analisados e os sem PDF; inclui os que o crawler ainda não descobriu.</p>
+    <p><strong>E-mails encontrados:</strong> soma dos e-mails de cada artigo (mesma unidade das estimativas); únicos e válidos contam endereços distintos.</p>
+    <p><strong>Supostos:</strong> artigos no site × média do sistema{% if avg %} ({{ ('%.2f'|format(avg.mean_capped)).replace('.', ',') }} e-mails por PDF){% endif %}.</p>
+    <p><strong>A extrair:</strong> estimativa de e-mails nos artigos que ainda faltam analisar.</p>
+    <p><strong>Não extraível:</strong> site protegido por anti-bot (linha destacada em vermelho): o crawler não consegue baixar os artigos.</p>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Data e hora da impressão no cabeçalho do papel
+    function setPrintDate() {
+        document.getElementById('print-date').textContent = new Date().toLocaleString('pt-BR');
+    }
+    setPrintDate();
+    window.addEventListener('beforeprint', setPrintDate);
+</script>
+{% if bg.running %}
+<script>
+    setTimeout(function () { window.location.reload(); }, 5000);
+</script>
+{% endif %}
+{% endblock %}

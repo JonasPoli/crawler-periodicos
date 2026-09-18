@@ -1,121 +1,298 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2 class="mb-4">Relatório: E-mails por Periódicos (Seleção Múltipla)</h2>
+<div class="d-flex flex-wrap justify-content-between align-items-center mb-4 gap-3">
+    <div>
+        <h2 class="mb-1 fw-bold text-dark">
+            <i class="fas fa-mail-bulk text-primary me-2"></i>Relatório de E-mails (Múltiplos Periódicos)
+        </h2>
+        <p class="text-muted mb-0">Filtre múltiplos periódicos simultaneamente e exporte diagnósticos detalhados no padrão <strong>NeverBounce</strong>.</p>
+    </div>
+    {% if selected_journal_ids %}
+    <div class="d-flex gap-2">
+        <button type="button" class="btn btn-outline-success shadow-sm" onclick="exportReport('csv')">
+            <i class="fas fa-file-csv me-1"></i> Exportar CSV
+        </button>
+        <button type="button" class="btn btn-primary shadow-sm" onclick="exportReport('neverbounce')">
+            <i class="fas fa-shield-alt me-1"></i> Exportar NeverBounce
+        </button>
+    </div>
+    {% endif %}
+</div>
 
-<div class="card shadow-sm mb-4">
-    <div class="card-body">
-        <form method="GET" class="row g-3">
-            <div class="col-md-12">
-                <div class="d-flex justify-content-between align-items-center mb-2">
-                    <label class="form-label fw-bold mb-0">Selecione os Periódicos</label>
-                    <span class="badge bg-info text-dark px-3 py-2" style="font-size: 0.95rem;">
-                        Previsão total: <span id="total_emails_preview" class="fw-bold">0</span> e-mail(s)
-                    </span>
-                </div>
-                <div class="border p-3 rounded bg-light" style="max-height: 300px; overflow-y: auto;">
-                    <div class="row">
-                        <button type="button" class="btn btn-sm btn-outline-secondary me-2 mb-2"
-                            onclick="toggleAllJournals(true)">Todas as Revistas</button>
-                        <button type="button" class="btn btn-sm btn-outline-secondary me-2 mb-2"
-                            onclick="toggleAllJournals(false)">Desmarcar Todas</button>
-                        <span class="text-muted mx-2 mb-2">|</span>
-                        {% set all_qualis = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C'] %}
-                        {% for q in all_qualis %}
-                        <button type="button" class="btn btn-sm btn-outline-info me-1 mb-2"
-                            onclick="toggleJournalsByQualis('{{ q }}')">+ {{ q }}</button>
-                        {% endfor %}
-                        <button type="button" class="btn btn-sm btn-outline-info me-1 mb-2"
-                            onclick="toggleJournalsByQualis('NONE')">+ Sem Qualis</button>
+<!-- ── Painel de Seleção de Periódicos ── -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+        <form method="GET" id="multiJournalForm" class="row g-3">
+            
+            <div class="col-12">
+                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 pb-2 border-bottom gap-2">
+                    <div>
+                        <h5 class="fw-bold mb-0 text-secondary">
+                            <i class="fas fa-layer-group me-1 text-primary"></i> Selecione os Periódicos
+                        </h5>
                     </div>
-                    {% for j in journals %}
-                    <div class="col-md-6 col-lg-4 mb-2">
-                        <div class="form-check">
-                            <input class="form-check-input journal-checkbox" type="checkbox" name="journal_ids"
-                                value="{{ j.id }}" id="journal_{{ j.id }}" data-count="{{ j.email_count }}"
-                                data-qualis="{{ j.qualis if j.qualis else 'NONE' }}" {{ 'checked' if j.id in
-                                selected_journal_ids else '' }}>
-                            <label class="form-check-label text-truncate d-block" for="journal_{{ j.id }}"
-                                title="{{ j.name }} - Qualis: {{ j.qualis or 'N/A' }}">
-                                [{{ j.id }}] {{ j.name }}
-                                <span class="badge bg-secondary ms-1">{{ j.qualis if j.qualis else '-' }}</span>
-                                <small class="text-muted ms-1">({{ j.email_count }} e-mail{% if j.email_count != 1
-                                    %}s{% endif %})</small>
-                            </label>
+                    <div class="d-flex gap-2 align-items-center">
+                        <span class="badge bg-light text-dark border px-3 py-2" style="font-size: 0.9rem;">
+                            Revistas selecionadas: <strong id="selected_count_preview" class="text-primary">0</strong> / {{ journals|length }}
+                        </span>
+                        <span class="badge bg-primary px-3 py-2" style="font-size: 0.9rem;">
+                            Previsão: <strong id="total_emails_preview">0</strong> e-mail(s)
+                        </span>
+                    </div>
+                </div>
+
+                <!-- Barra de Ferramentas de Filtro Rápido e Busca -->
+                <div class="bg-light p-3 rounded-3 mb-3 border">
+                    <div class="row g-2 align-items-center mb-3">
+                        <div class="col-md-6 col-lg-5">
+                            <div class="input-group">
+                                <span class="input-group-text bg-white border-end-0">
+                                    <i class="fas fa-search text-muted"></i>
+                                </span>
+                                <input type="text" id="journalSearchInput" class="form-control border-start-0 ps-0" 
+                                       placeholder="Buscar revista por nome ou ID..." oninput="filterJournalCards()">
+                                <button class="btn btn-outline-secondary" type="button" onclick="clearSearch()" title="Limpar busca">
+                                    <i class="fas fa-times"></i>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-7 d-flex flex-wrap gap-2 justify-content-md-end">
+                            <button type="button" class="btn btn-sm btn-outline-primary fw-semibold" onclick="toggleAllJournals(true)">
+                                <i class="fas fa-check-double me-1"></i> Marcar Todas
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary fw-semibold" onclick="toggleAllJournals(false)">
+                                <i class="fas fa-undo me-1"></i> Desmarcar Todas
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-dark fw-semibold" onclick="toggleVisibleJournals()">
+                                <i class="fas fa-filter me-1"></i> Marcar Visíveis na Busca
+                            </button>
                         </div>
                     </div>
-                    {% endfor %}
+
+                    <!-- Filtros por Qualis -->
+                    <div class="d-flex flex-wrap align-items-center gap-1 pt-2 border-top">
+                        <span class="small fw-bold text-muted me-2">Atalhos Qualis:</span>
+                        {% set all_qualis = ['A1', 'A2', 'A3', 'A4', 'B1', 'B2', 'B3', 'B4', 'C'] %}
+                        {% for q in all_qualis %}
+                        <button type="button" class="btn btn-sm btn-outline-info py-0 px-2 qualis-filter-btn" 
+                                style="font-size: 0.8rem;" onclick="toggleJournalsByQualis('{{ q }}')">
+                            + {{ q }}
+                        </button>
+                        {% endfor %}
+                        <button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2 qualis-filter-btn" 
+                                style="font-size: 0.8rem;" onclick="toggleJournalsByQualis('NONE')">
+                            + Sem Qualis
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Grid de Checkboxes de Periódicos -->
+                <div class="border rounded-3 p-3 bg-white" style="max-height: 380px; overflow-y: auto; scrollbar-width: thin;">
+                    <div class="row g-2" id="journalCardsContainer">
+                        {% for j in journals %}
+                        <div class="col-md-6 col-lg-4 journal-item" 
+                             data-name="{{ j.name|lower }}" 
+                             data-id="{{ j.id }}"
+                             data-qualis="{{ j.qualis if j.qualis else 'NONE' }}">
+                            <div class="p-2 border rounded-2 h-100 journal-card d-flex align-items-center gap-2 {{ 'bg-light border-primary' if j.id in selected_journal_ids else 'bg-white' }}" 
+                                 onclick="toggleCardCheck(event, 'journal_{{ j.id }}')">
+                                <input class="form-check-input mt-0 journal-checkbox flex-shrink-0" type="checkbox" name="journal_ids"
+                                    value="{{ j.id }}" id="journal_{{ j.id }}" data-count="{{ j.email_count }}"
+                                    data-qualis="{{ j.qualis if j.qualis else 'NONE' }}" 
+                                    {{ 'checked' if j.id in selected_journal_ids else '' }}
+                                    onclick="event.stopPropagation(); updatePreview();">
+                                <label class="form-check-label text-truncate w-100 cursor-pointer mb-0" for="journal_{{ j.id }}"
+                                    title="[{{ j.id }}] {{ j.name }} - Qualis: {{ j.qualis or 'N/A' }} ({{ j.email_count }} emails)">
+                                    <span class="text-secondary fw-bold small">#{{ j.id }}</span>
+                                    <span class="fw-semibold text-dark small">{{ j.name }}</span>
+                                    <div class="d-flex gap-1 align-items-center mt-1">
+                                        <span class="badge bg-{{ 'success' if j.qualis in ['A1','A2'] else ('info' if j.qualis in ['A3','A4'] else ('warning text-dark' if j.qualis in ['B1','B2'] else 'secondary')) }}" style="font-size: 0.7rem;">
+                                            {{ j.qualis if j.qualis else 'S/ Qualis' }}
+                                        </span>
+                                        <span class="badge bg-light text-secondary border" style="font-size: 0.7rem;">
+                                            {{ j.email_count }} e-mails
+                                        </span>
+                                    </div>
+                                </label>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
                 </div>
             </div>
-    </div>
 
-    <div class="col-md-4">
-        <label for="status" class="form-label fw-bold">Status</label>
-        <select class="form-select" id="status" name="status">
-            <option value="">Todos</option>
-            <option value="PENDING" {{ 'selected' if selected_status=='PENDING' else '' }}>Pending</option>
-            <option value="VALID" {{ 'selected' if selected_status=='VALID' else '' }}>Valid</option>
-            <option value="INVALID" {{ 'selected' if selected_status=='INVALID' else '' }}>Invalid</option>
-        </select>
-    </div>
+            <!-- Filtro de Status e Botão Submeter -->
+            <div class="col-md-6 col-lg-4">
+                <label for="status" class="form-label fw-bold small text-secondary">Status de Verificação</label>
+                <select class="form-select" id="status" name="status">
+                    <option value="">Todos os Status</option>
+                    <option value="VALID" {{ 'selected' if selected_status=='VALID' else '' }}>✓ VALID (Válidos)</option>
+                    <option value="INVALID" {{ 'selected' if selected_status=='INVALID' else '' }}>✗ INVALID (Inválidos)</option>
+                    <option value="ACCEPT_ALL" {{ 'selected' if selected_status=='ACCEPT_ALL' else '' }}>⚡ ACCEPT_ALL (Catch-All)</option>
+                    <option value="UNKNOWN" {{ 'selected' if selected_status=='UNKNOWN' else '' }}>? UNKNOWN (Indeterminados)</option>
+                    <option value="PENDING" {{ 'selected' if selected_status=='PENDING' else '' }}>⏳ PENDING (Pendentes)</option>
+                </select>
+            </div>
 
-    <div class="col-md-2 d-flex align-items-end">
-        <button type="submit" class="btn btn-primary w-100"><i class="fas fa-filter"></i> Filtrar</button>
+            <div class="col-md-6 col-lg-3 d-flex align-items-end">
+                <button type="submit" class="btn btn-primary w-100 shadow-sm fw-semibold py-2">
+                    <i class="fas fa-search me-1"></i> Filtrar Resultados
+                </button>
+            </div>
+        </form>
     </div>
-    </form>
 </div>
-</div>
 
+<!-- ── Dashboard de Métricas Estilo NeverBounce ── -->
 {% if selected_journal_ids %}
-<div class="d-flex justify-content-between align-items-center mb-3">
-    <div>
-        <h5 class="mb-0">Resultados encontrados: {{ emails|length }}{% if emails|length == 1000 %}+ (limitado na tela){%
-            endif %}</h5>
-        {% if emails|length == 1000 %}
-        <small class="text-muted">A exportação CSV incluirá todos os registros sem limite.</small>
-        {% endif %}
+<div class="card shadow-sm border-0 mb-4 bg-gradient">
+    <div class="card-body p-4">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+            <h5 class="fw-bold mb-0 text-dark">
+                <i class="fas fa-chart-pie text-primary me-2"></i>Diagnóstico de Entregabilidade (NeverBounce)
+            </h5>
+            <span class="badge bg-dark text-white px-3 py-2">
+                {{ selected_journal_ids|length }} Periódico(s) Analisado(s)
+            </span>
+        </div>
+
+        <div class="row g-3">
+            <!-- Card Total -->
+            <div class="col-sm-6 col-xl-2">
+                <div class="p-3 bg-light rounded-3 border h-100 text-center">
+                    <span class="text-muted small text-uppercase fw-bold">Total E-mails</span>
+                    <h3 class="fw-bold text-dark my-1">{{ summary_stats.total }}</h3>
+                    <small class="text-secondary">base consolidada</small>
+                </div>
+            </div>
+
+            <!-- Card Válidos -->
+            <div class="col-sm-6 col-xl-2">
+                <div class="p-3 bg-success bg-opacity-10 border border-success border-opacity-25 rounded-3 h-100 text-center">
+                    <span class="text-success small text-uppercase fw-bold">Válidos (VALID)</span>
+                    <h3 class="fw-bold text-success my-1">{{ summary_stats.valid }}</h3>
+                    <small class="text-success fw-semibold">
+                        {{ "%.1f"|format((summary_stats.valid / summary_stats.total * 100) if summary_stats.total > 0 else 0) }}%
+                    </small>
+                </div>
+            </div>
+
+            <!-- Card Inválidos -->
+            <div class="col-sm-6 col-xl-2">
+                <div class="p-3 bg-danger bg-opacity-10 border border-danger border-opacity-25 rounded-3 h-100 text-center">
+                    <span class="text-danger small text-uppercase fw-bold">Inválidos (INVALID)</span>
+                    <h3 class="fw-bold text-danger my-1">{{ summary_stats.invalid }}</h3>
+                    <small class="text-danger fw-semibold">
+                        {{ "%.1f"|format((summary_stats.invalid / summary_stats.total * 100) if summary_stats.total > 0 else 0) }}%
+                    </small>
+                </div>
+            </div>
+
+            <!-- Card Catch-All / Unknown -->
+            <div class="col-sm-6 col-xl-2">
+                <div class="p-3 bg-warning bg-opacity-10 border border-warning border-opacity-25 rounded-3 h-100 text-center">
+                    <span class="text-warning text-dark small text-uppercase fw-bold">Accept-All / Unknown</span>
+                    <h3 class="fw-bold text-dark my-1">{{ summary_stats.accept_all + summary_stats.unknown }}</h3>
+                    <small class="text-muted">risco moderado</small>
+                </div>
+            </div>
+
+            <!-- Card Pendentes -->
+            <div class="col-sm-6 col-xl-2">
+                <div class="p-3 bg-secondary bg-opacity-10 border border-secondary border-opacity-25 rounded-3 h-100 text-center">
+                    <span class="text-secondary small text-uppercase fw-bold">Pendentes</span>
+                    <h3 class="fw-bold text-secondary my-1">{{ summary_stats.pending }}</h3>
+                    <small class="text-muted">aguardando teste</small>
+                </div>
+            </div>
+
+            <!-- Card Taxa de Entregabilidade -->
+            <div class="col-sm-6 col-xl-2">
+                <div class="p-3 bg-primary bg-opacity-10 border border-primary border-opacity-25 rounded-3 h-100 text-center">
+                    <span class="text-primary small text-uppercase fw-bold">Entregabilidade</span>
+                    <h3 class="fw-bold text-primary my-1">{{ summary_stats.deliverability }}%</h3>
+                    <small class="text-primary fw-semibold">score geral</small>
+                </div>
+            </div>
+        </div>
     </div>
-    <button type="button" class="btn btn-success" onclick="exportCsv()">
-        <i class="fas fa-file-csv"></i> Exportar CSV
-    </button>
 </div>
 
-<div class="card shadow-sm">
-    <div class="card-body">
+<!-- ── Tabela de Resultados ── -->
+<div class="card shadow-sm border-0 mb-4">
+    <div class="card-body p-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+            <div>
+                <h5 class="fw-bold mb-0">E-mails Extraídos (Amostra na tela: {{ emails|length }})</h5>
+                {% if emails|length == 1000 %}
+                <small class="text-muted">A tela exibe até 1.000 registros para alta velocidade. Use os botões de exportação acima para baixar a base completa.</small>
+                {% endif %}
+            </div>
+            <div class="d-flex gap-2">
+                <button type="button" class="btn btn-sm btn-outline-success" onclick="exportReport('csv')">
+                    <i class="fas fa-file-csv me-1"></i> CSV
+                </button>
+                <button type="button" class="btn btn-sm btn-primary" onclick="exportReport('neverbounce')">
+                    <i class="fas fa-shield-alt me-1"></i> NeverBounce CSV
+                </button>
+            </div>
+        </div>
+
         <div class="table-responsive">
-            <table class="table table-hover table-striped">
-                <thead class="table-dark">
+            <table class="table table-hover align-middle">
+                <thead class="table-light">
                     <tr>
-                        <th>ID do Periódico</th>
-                        <th>Nome do Periódico</th>
-                        <th>ID</th>
-                        <th>Email</th>
-                        <th>Status</th>
-                        <th>Artigo</th>
+                        <th style="width: 70px;">ID</th>
+                        <th>E-mail</th>
+                        <th>Periódico</th>
+                        <th style="width: 140px;">Status NeverBounce</th>
+                        <th>Artigo Vinculado</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for email in emails %}
                     <tr>
-                        <td>{{ email.article.edition.journal.id }}</td>
-                        <td>{{ email.article.edition.journal.name }}</td>
-                        <td><a href="{{ url_for('edit_email', id=email.id) }}">{{ email.id }}</a></td>
-                        <td>{{ email.email }}</td>
+                        <td class="text-secondary small"><a href="{{ url_for('edit_email', id=email.id) }}" class="fw-bold text-decoration-none">#{{ email.id }}</a></td>
+                        <td class="fw-mono text-dark fw-semibold">{{ email.email }}</td>
                         <td>
-                            <span
-                                class="badge bg-{{ 'success' if email.verification_status == 'VALID' else ('danger' if email.verification_status == 'INVALID' else 'secondary') }}">
-                                {{ email.verification_status }}
+                            {% if email.article and email.article.edition and email.article.edition.journal %}
+                            <span class="badge bg-light text-dark border me-1">#{{ email.article.edition.journal.id }}</span>
+                            <span class="small text-truncate d-inline-block" style="max-width: 250px;" title="{{ email.article.edition.journal.name }}">
+                                {{ email.article.edition.journal.name }}
                             </span>
+                            {% else %}
+                            -
+                            {% endif %}
                         </td>
                         <td>
-                            <a href="{{ url_for('edit_article', id=email.article.id) }}">
-                                {{ email.article.title[:80] }}...
+                            {% if email.verification_status == 'VALID' %}
+                            <span class="badge bg-success px-2 py-1"><i class="fas fa-check-circle me-1"></i> VALID</span>
+                            {% elif email.verification_status == 'INVALID' %}
+                            <span class="badge bg-danger px-2 py-1"><i class="fas fa-times-circle me-1"></i> INVALID</span>
+                            {% elif email.verification_status == 'ACCEPT_ALL' %}
+                            <span class="badge bg-purple text-white px-2 py-1" style="background-color: #6f42c1;"><i class="fas fa-bolt me-1"></i> ACCEPT ALL</span>
+                            {% elif email.verification_status == 'UNKNOWN' %}
+                            <span class="badge bg-warning text-dark px-2 py-1"><i class="fas fa-question-circle me-1"></i> UNKNOWN</span>
+                            {% else %}
+                            <span class="badge bg-secondary px-2 py-1">PENDING</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            {% if email.article %}
+                            <a href="{{ url_for('edit_article', id=email.article.id) }}" class="text-decoration-none small text-truncate d-inline-block" style="max-width: 320px;" title="{{ email.article.title }}">
+                                {{ email.article.title }}
                             </a>
+                            {% else %}
+                            <span class="text-muted small">-</span>
+                            {% endif %}
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="4" class="text-center py-4">Nenhum e-mail encontrado para os filtros selecionados.
+                        <td colspan="5" class="text-center py-5 text-muted">
+                            <i class="fas fa-search fa-2x mb-2 text-secondary opacity-50 d-block"></i>
+                            Nenhum e-mail encontrado para os periódicos e filtros selecionados.
                         </td>
                     </tr>
                     {% endfor %}
@@ -126,23 +303,71 @@
 </div>
 {% endif %}
 
+<style>
+.journal-card {
+    transition: all 0.15s ease-in-out;
+    cursor: pointer;
+}
+.journal-card:hover {
+    border-color: #0d6efd !important;
+    background-color: #f0f7ff !important;
+}
+.cursor-pointer {
+    cursor: pointer;
+}
+</style>
+
 <script>
     function updatePreview() {
-        let total = 0;
+        let totalEmails = 0;
+        let selectedCount = 0;
         document.querySelectorAll('.journal-checkbox').forEach(cb => {
+            const card = cb.closest('.journal-card');
             if (cb.checked) {
-                total += parseInt(cb.getAttribute('data-count') || 0, 10);
+                totalEmails += parseInt(cb.getAttribute('data-count') || 0, 10);
+                selectedCount++;
+                if (card) {
+                    card.classList.add('bg-light', 'border-primary');
+                    card.classList.remove('bg-white');
+                }
+            } else {
+                if (card) {
+                    card.classList.remove('bg-light', 'border-primary');
+                    card.classList.add('bg-white');
+                }
             }
         });
-        document.getElementById('total_emails_preview').textContent = total;
+        document.getElementById('total_emails_preview').textContent = totalEmails.toLocaleString('pt-BR');
+        document.getElementById('selected_count_preview').textContent = selectedCount;
     }
 
-    document.addEventListener('DOMContentLoaded', function () {
-        document.querySelectorAll('.journal-checkbox').forEach(cb => {
-            cb.addEventListener('change', updatePreview);
+    function toggleCardCheck(event, checkboxId) {
+        if (event.target.tagName.toLowerCase() === 'input') return;
+        const cb = document.getElementById(checkboxId);
+        if (cb) {
+            cb.checked = !cb.checked;
+            updatePreview();
+        }
+    }
+
+    function filterJournalCards() {
+        const query = document.getElementById('journalSearchInput').value.toLowerCase().trim();
+        const items = document.querySelectorAll('.journal-item');
+        items.forEach(item => {
+            const name = item.getAttribute('data-name') || '';
+            const id = item.getAttribute('data-id') || '';
+            if (name.includes(query) || id === query) {
+                item.style.display = '';
+            } else {
+                item.style.display = 'none';
+            }
         });
-        updatePreview();
-    });
+    }
+
+    function clearSearch() {
+        document.getElementById('journalSearchInput').value = '';
+        filterJournalCards();
+    }
 
     function toggleAllJournals(checked) {
         document.querySelectorAll('.journal-checkbox').forEach(cb => {
@@ -151,8 +376,17 @@
         updatePreview();
     }
 
+    function toggleVisibleJournals() {
+        document.querySelectorAll('.journal-item').forEach(item => {
+            if (item.style.display !== 'none') {
+                const cb = item.querySelector('.journal-checkbox');
+                if (cb) cb.checked = true;
+            }
+        });
+        updatePreview();
+    }
+
     function toggleJournalsByQualis(qualis) {
-        // Toggle action: if all matching are checked, uncheck them. Otherwise, check them all.
         const checkboxes = Array.from(document.querySelectorAll('.journal-checkbox')).filter(cb => cb.getAttribute('data-qualis') === qualis);
         if (checkboxes.length === 0) return;
 
@@ -163,10 +397,27 @@
         updatePreview();
     }
 
-    function exportCsv() {
-        const url = new URL(window.location.href);
-        url.searchParams.set('export', 'csv');
+    function exportReport(type) {
+        const form = document.getElementById('multiJournalForm');
+        const selectedCheckboxes = document.querySelectorAll('.journal-checkbox:checked');
+        if (selectedCheckboxes.length === 0) {
+            alert('Por favor, selecione ao menos um periódico para exportar.');
+            return;
+        }
+        const url = new URL(window.location.origin + window.location.pathname);
+        selectedCheckboxes.forEach(cb => {
+            url.searchParams.append('journal_ids', cb.value);
+        });
+        const status = document.getElementById('status').value;
+        if (status) {
+            url.searchParams.set('status', status);
+        }
+        url.searchParams.set('export', type);
         window.location.href = url.toString();
     }
+
+    document.addEventListener('DOMContentLoaded', function () {
+        updatePreview();
+    });
 </script>
 {% endblock %}

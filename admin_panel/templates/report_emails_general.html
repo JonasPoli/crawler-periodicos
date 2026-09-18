@@ -8,10 +8,10 @@
         <form method="GET" class="row g-3">
             <div class="col-md-3">
                 <label for="journal_id" class="form-label">Periódico</label>
-                <select class="form-select" id="journal_id" name="journal_id">
+                <select class="form-select" id="journal_id" name="journal_id" placeholder="Todos os periódicos...">
                     <option value="">Todos</option>
                     {% for j in journals %}
-                    <option value="{{ j.id }}" {{ 'selected' if f_journal_id==j.id else '' }}>{{ j.name }}</option>
+                    <option value="{{ j.id }}" {{ 'selected' if f_journal_id==j.id else '' }}>[{{ j.id }}] {{ j.name }}</option>
                     {% endfor %}
                 </select>
             </div>
@@ -101,4 +101,25 @@
         </nav>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const journalSelect = document.getElementById('journal_id');
+        if (journalSelect) {
+            new TomSelect(journalSelect, {
+                create: false,
+                sortField: {
+                    field: "text",
+                    direction: "asc"
+                },
+                placeholder: "Todos os periódicos (pesquisar...)",
+                allowEmptyOption: true,
+                maxOptions: 500,
+                plugins: ['clear_button']
+            });
+        }
+    });
+</script>
 {% endblock %}

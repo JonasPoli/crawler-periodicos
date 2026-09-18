@@ -1,7 +1,7 @@
 import os
 import datetime
-from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, DateTime, Boolean, UniqueConstraint, event
-from sqlalchemy.orm import declarative_base, relationship, sessionmaker
+from sqlalchemy import create_engine, Column, Integer, String, Text, ForeignKey, DateTime, Boolean, Float, UniqueConstraint, event
+from sqlalchemy.orm import declarative_base, relationship, sessionmaker, backref
 from sqlalchemy.engine import Engine
 
 @event.listens_for(Engine, "connect")
@@ -58,7 +58,7 @@ class Edition(Base):
     __tablename__ = 'editions'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    journal_id = Column(Integer, ForeignKey('journals.id'), nullable=False)
+    journal_id = Column(Integer, ForeignKey('journals.id'), nullable=False, index=True)
     
     # Volume/Number info
     volume = Column(String(50), nullable=True)
@@ -70,7 +70,7 @@ class Edition(Base):
     url = Column(String(1024), nullable=False)
     
     # Status: 'found', 'processing', 'completed', 'error'
-    status = Column(String(50), default='found')
+    status = Column(String(50), default='found', index=True)
     
     # Canonicalization and Alias support
     canonical_edition_id = Column(Integer, ForeignKey('editions.id', ondelete='SET NULL'), nullable=True)
@@ -78,7 +78,7 @@ class Edition(Base):
     alias_notes = Column(String(500), nullable=True)
 
     # Locking for parallel processing
-    worker_id = Column(String(50), nullable=True)
+    worker_id = Column(String(50), nullable=True, index=True)
     lock_time = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -99,7 +99,7 @@ class Article(Base):
     __tablename__ = 'articles'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    edition_id = Column(Integer, ForeignKey('editions.id'), nullable=False)
+    edition_id = Column(Integer, ForeignKey('editions.id'), nullable=False, index=True)
     
     title = Column(Text, nullable=False)
     url = Column(String(1024), nullable=True)
@@ -117,11 +117,11 @@ class Article(Base):
     language = Column(String(10), nullable=True)
     
     # Status: 'found', 'downloaded', 'parsed', 'metadata_enriched', 'error'
-    status = Column(String(50), default='found')
+    status = Column(String(50), default='found', index=True)
     published_date = Column(String(50), nullable=True) # Textual date as scraped
 
     # Locking for parallel processing
-    worker_id = Column(String(50), nullable=True)
+    worker_id = Column(String(50), nullable=True, index=True)
     lock_time = Column(DateTime, nullable=True)
 
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
@@ -141,8 +141,8 @@ class Author(Base):
     __tablename__ = 'authors'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    name = Column(String(255), nullable=False)
-    email = Column(String(255), nullable=True)
+    name = Column(String(255), nullable=False, index=True)
+    email = Column(String(255), nullable=True, index=True)
     affiliation = Column(Text, nullable=True)
     orcid = Column(String(50), nullable=True)
     
@@ -157,8 +157,8 @@ class Author(Base):
 class ArticleAuthor(Base):
     __tablename__ = 'article_authors'
 
-    article_id = Column(Integer, ForeignKey('articles.id'), primary_key=True)
-    author_id = Column(Integer, ForeignKey('authors.id'), primary_key=True)
+    article_id = Column(Integer, ForeignKey('articles.id'), primary_key=True, index=True)
+    author_id = Column(Integer, ForeignKey('authors.id'), primary_key=True, index=True)
 
 class Keyword(Base):
     __tablename__ = 'keywords'
@@ -197,7 +197,7 @@ class File(Base):
     __tablename__ = 'files'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    article_id = Column(Integer, ForeignKey('articles.id'), nullable=False)
+    article_id = Column(Integer, ForeignKey('articles.id'), nullable=False, index=True)
     
     # 'pdf', 'html', 'xml', etc.
     file_type = Column(String(20), nullable=False) 
@@ -222,7 +222,7 @@ class FileAnalysisLog(Base):
     __tablename__ = 'file_analysis_logs'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    file_id = Column(Integer, ForeignKey('files.id'), nullable=False)
+    file_id = Column(Integer, ForeignKey('files.id'), nullable=False, index=True)
     
     # Method used: 'pypdf', 'pdfplumber', etc.
     method_name = Column(String(50), nullable=False)
@@ -244,11 +244,11 @@ class CapturedEmail(Base):
     __tablename__ = 'captured_emails'
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    email = Column(String(255), nullable=False)
-    article_id = Column(Integer, ForeignKey('articles.id'), nullable=False)
+    email = Column(String(255), nullable=False, index=True)
+    article_id = Column(Integer, ForeignKey('articles.id'), nullable=False, index=True)
     
     # Verification Status
-    verification_status = Column(String(50), default='PENDING') # PENDING, VALID, INVALID, UNKNOWN
+    verification_status = Column(String(50), default='PENDING', index=True) # PENDING, VALID, INVALID, UNKNOWN
     
     # Detailed Checks
     valid_syntax = Column(Boolean, nullable=True)
@@ -257,7 +257,7 @@ class CapturedEmail(Base):
     valid_smtp = Column(Boolean, nullable=True)
     
     # Processing Metadata
-    worker_id = Column(String(50), nullable=True)
+    worker_id = Column(String(50), nullable=True, index=True)
     lock_time = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.datetime.utcnow, onupdate=datetime.datetime.utcnow)
@@ -324,6 +324,38 @@ class ErrorLog(Base):
         return f"<ErrorLog(type={self.error_type}, phase={self.phase})>"
 
 
+class JournalSizeEstimate(Base):
+    """Medição do tamanho de um periódico feita direto no site (antes do processamento). Ver journal_sizer.py."""
+    __tablename__ = 'journal_size_estimates'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    journal_id = Column(Integer, ForeignKey('journals.id', ondelete='CASCADE'), nullable=False, index=True)
+
+    # Status: 'ok' (contagem obtida), 'failed' (nenhuma estratégia funcionou)
+    status = Column(String(20), nullable=False, default='ok')
+    platform = Column(String(20), nullable=True)  # 'ojs', 'scielo'
+    # Estratégia que gerou o número: 'sitemap', 'oai', 'articlemeta', 'archive_full', 'archive_sample'
+    method = Column(String(30), nullable=True)
+
+    issues_count = Column(Integer, nullable=True)
+    articles_count = Column(Integer, nullable=True)
+    is_exact = Column(Boolean, default=False)
+    confidence = Column(String(10), nullable=True)  # 'alta', 'media', 'baixa'
+    # Proteção anti-bot que barrou o site ('cloudflare', 'sucuri'...): a extração não é possível
+    blocked_by = Column(String(50), nullable=True)
+
+    requests_count = Column(Integer, default=0)
+    duration_seconds = Column(Float, default=0)
+    details = Column(Text, nullable=True)  # JSON com o resultado de cada estratégia tentada
+    error = Column(Text, nullable=True)
+    measured_at = Column(DateTime, default=datetime.datetime.utcnow, index=True)
+
+    journal = relationship("Journal", backref=backref("size_estimates", cascade="all, delete-orphan"))
+
+    def __repr__(self):
+        return f"<JournalSizeEstimate(journal_id={self.journal_id}, articles={self.articles_count}, method={self.method})>"
+
+
 def init_db():
     engine = create_engine(DATABASE_URL, connect_args={'timeout': 60})
     Base.metadata.create_all(engine)
@@ -340,6 +372,9 @@ def init_db():
                 conn.exec_driver_sql("ALTER TABLE editions ADD COLUMN is_canonical BOOLEAN DEFAULT 1")
             if 'alias_notes' not in col_names:
                 conn.exec_driver_sql("ALTER TABLE editions ADD COLUMN alias_notes VARCHAR(500)")
+            size_cols = [r[1] for r in conn.exec_driver_sql("PRAGMA table_info(journal_size_estimates)").fetchall()]
+            if size_cols and 'blocked_by' not in size_cols:
+                conn.exec_driver_sql("ALTER TABLE journal_size_estimates ADD COLUMN blocked_by VARCHAR(50)")
             conn.commit()
     except Exception as e:
         pass
