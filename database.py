@@ -356,6 +356,29 @@ class JournalSizeEstimate(Base):
         return f"<JournalSizeEstimate(journal_id={self.journal_id}, articles={self.articles_count}, method={self.method})>"
 
 
+class MonitorGroup(Base):
+    """Um conjunto de periódicos marcados para acompanhamento no painel.
+
+    `started_at` é o marco do cronômetro: dele saem o tempo decorrido e a
+    velocidade média que sustentam a previsão de término do grupo.
+    """
+    __tablename__ = 'monitor_groups'
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    name = Column(String(255), nullable=False, default='Grupo')
+    journal_ids = Column(Text, nullable=False, default='')  # IDs separados por vírgula
+    started_at = Column(DateTime, default=datetime.datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    archived = Column(Boolean, default=False)
+
+    @property
+    def ids(self):
+        return [int(x) for x in (self.journal_ids or '').split(',') if x.strip()]
+
+    def __repr__(self):
+        return f"<MonitorGroup(name={self.name}, journals={len(self.ids)})>"
+
+
 def init_db():
     engine = create_engine(DATABASE_URL, connect_args={'timeout': 60})
     Base.metadata.create_all(engine)

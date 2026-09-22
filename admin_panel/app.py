@@ -1,6 +1,7 @@
 import sys
 import os
-from flask import Flask, render_template, request, redirect, url_for, flash, make_response, g, send_file
+import datetime
+from flask import Flask, render_template, request, redirect, url_for, flash, make_response, g, send_file, jsonify
 from sqlalchemy import func, case
 import csv
 import io
@@ -8,9 +9,10 @@ import io
 # Add parent directory to path to import database modules
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-from database import get_session, Journal, Article, File, CapturedEmail, Author, Edition, ExecutionRun, ErrorLog
+from database import get_session, Journal, Article, File, CapturedEmail, Author, Edition, ExecutionRun, ErrorLog, MonitorGroup
 from journal_sizer import enqueue_measurement, background_status, ensure_schema, journals_needing_measurement
 from journal_report import build_report, report_csv
+from group_monitor import snapshot, format_duration, format_minutes, first_run_start
 
 app = Flask(__name__)
 app.secret_key = 'supersecretkey'  # Change this in production
@@ -379,6 +381,128 @@ def measure_journal_sizes():
     else:
         flash("Nenhum periódico precisa de medição.")
     return redirect(url_for('journal_sizes'))
+
+
+# --- ACOMPANHAMENTO DE GRUPO ---
+def _current_group(session, group_id=None):
+    """Grupo pedido na URL, ou o mais recente que não foi arquivado."""
+    query = session.query(MonitorGroup).filter(MonitorGroup.archived == False)
+    if group_id:
+        return session.query(MonitorGroup).filter(MonitorGroup.id == group_id).first()
+    return query.order_by(MonitorGroup.id.desc()).first()
+
+
+def _snapshot_payload(snap):
+    """Snapshot pronto para o JSON: datas em ISO e os rótulos já formatados."""
+    local_offset = datetime.datetime.now() - datetime.datetime.now(datetime.timezone.utc).replace(tzinfo=None)
+
+    def local_iso(dt):
+        return (dt + local_offset).isoformat() if dt else None
+
+    payload = {
+        'generated_at': local_iso(snap['generated_at']),
+        'started_at': local_iso(snap['started_at']),
+        'elapsed_seconds': snap['elapsed_seconds'],
+        'elapsed_label': format_duration(snap['elapsed_seconds']),
+        'rate_now': snap['rate_now'],
+        'rate_avg': snap['rate_avg'],
+        'rate_used': snap['rate_used'],
+        'window_minutes': snap['window_minutes'],
+        'eta_minutes': snap['eta_minutes'],
+        'eta_label': format_minutes(snap['eta_minutes']),
+        'eta_now_label': format_minutes(snap['eta_now_minutes']),
+        'eta_at': local_iso(snap['eta_at']),
+        'done_since_start': snap['done_since_start'],
+        'totals': snap['totals'],
+        'journals': [],
+    }
+    for r in snap['journals']:
+        row = dict(r)
+        row['eta_label'] = format_minutes(r['eta_minutes'])
+        payload['journals'].append(row)
+    return payload
+
+
+@app.route('/monitor')
+def monitor_group():
+    session = get_db()
+    ensure_schema()
+    group = _current_group(session, request.args.get('group_id', type=int))
+    groups = session.query(MonitorGroup).filter(MonitorGroup.archived == False)\
+        .order_by(MonitorGroup.id.desc()).all()
+    journals = session.query(Journal).order_by(Journal.name).all()
+
+    ids = group.ids if group else []
+    snap = snapshot(session, ids, started_at=group.started_at if group else None)
+
+    return render_template('monitor.html',
+                           group=group, groups=groups, journals=journals,
+                           selected_ids=ids, snap=snap,
+                           payload=_snapshot_payload(snap))
+
+
+@app.route('/monitor/data')
+def monitor_group_data():
+    """Números do grupo em JSON — a página se atualiza sozinha por aqui."""
+    session = get_db()
+    group = _current_group(session, request.args.get('group_id', type=int))
+    if not group:
+        return jsonify({'error': 'nenhum grupo marcado'}), 404
+    snap = snapshot(session, group.ids, started_at=group.started_at)
+    return jsonify(_snapshot_payload(snap))
+
+
+@app.route('/monitor/save', methods=['POST'])
+def monitor_group_save():
+    session = get_db()
+    ensure_schema()
+    ids = request.form.getlist('journal_ids', type=int)
+    name = (request.form.get('name') or '').strip() or 'Grupo em acompanhamento'
+    group_id = request.form.get('group_id', type=int)
+
+    if not ids:
+        flash("Marque pelo menos um periódico para acompanhar.")
+        return redirect(url_for('monitor_group', group_id=group_id))
+
+    group = session.query(MonitorGroup).filter(MonitorGroup.id == group_id).first() if group_id else None
+    if group:
+        group.name = name
+        group.journal_ids = ','.join(str(i) for i in ids)
+        if request.form.get('reset_timer'):
+            group.started_at = datetime.datetime.utcnow()
+        flash(f"Grupo atualizado: {len(ids)} periódico(s).")
+    else:
+        # O cronômetro começa no run mais antigo ainda em execução, se houver:
+        # assim um processo já disparado no terminal não perde o tempo corrido.
+        started = first_run_start(session, ids) or datetime.datetime.utcnow()
+        group = MonitorGroup(name=name, journal_ids=','.join(str(i) for i in ids), started_at=started)
+        session.add(group)
+        flash(f"Grupo criado com {len(ids)} periódico(s).")
+    session.commit()
+    return redirect(url_for('monitor_group', group_id=group.id))
+
+
+@app.route('/monitor/restart', methods=['POST'])
+def monitor_group_restart():
+    session = get_db()
+    group = session.query(MonitorGroup).filter(MonitorGroup.id == request.form.get('group_id', type=int)).first()
+    if group:
+        group.started_at = datetime.datetime.utcnow()
+        session.commit()
+        flash("Cronômetro reiniciado agora.")
+    return redirect(url_for('monitor_group', group_id=group.id if group else None))
+
+
+@app.route('/monitor/delete', methods=['POST'])
+def monitor_group_delete():
+    session = get_db()
+    group = session.query(MonitorGroup).filter(MonitorGroup.id == request.form.get('group_id', type=int)).first()
+    if group:
+        group.archived = True
+        session.commit()
+        flash("Grupo removido do acompanhamento.")
+    return redirect(url_for('monitor_group'))
+
 
 # --- ARTICLES ---
 @app.route('/articles')

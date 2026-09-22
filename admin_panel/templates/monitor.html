@@ -1,0 +1,319 @@
+{% extends "base.html" %}
+
+{% macro num(n) -%}
+{{ '-' if n is none else '{:,}'.format(n).replace(',', '.') }}
+{%- endmacro %}
+
+{% block content %}
+<div class="d-flex justify-content-between flex-wrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <div>
+        <h1 class="h2 mb-1"><i class="fas fa-stopwatch me-2 text-primary"></i> Acompanhar Grupo</h1>
+        <p class="text-muted mb-0">Marque as revistas em processamento e veja o tempo corrido, o que já saiu e quando o grupo deve terminar.</p>
+    </div>
+    <div class="btn-toolbar gap-2 mb-2 mb-md-0 align-items-center">
+        {% if groups %}
+        <form method="GET" class="d-flex align-items-center gap-2">
+            <label class="small text-muted mb-0">Grupo:</label>
+            <select name="group_id" class="form-select form-select-sm" style="width: 220px;" onchange="this.form.submit()">
+                {% for g in groups %}
+                <option value="{{ g.id }}" {{ 'selected' if group and g.id == group.id }}>{{ g.name }} ({{ g.ids|length }})</option>
+                {% endfor %}
+            </select>
+        </form>
+        {% endif %}
+        <button class="btn btn-sm btn-outline-primary" type="button" data-bs-toggle="collapse" data-bs-target="#groupPicker">
+            <i class="fas fa-check-square me-1"></i> {{ 'Alterar seleção' if group else 'Marcar revistas' }}
+        </button>
+        {% if group %}
+        <form method="POST" action="{{ url_for('monitor_group_restart') }}"
+              onsubmit="return confirm('Reiniciar o cronômetro agora? O tempo corrido volta a zero.');">
+            <input type="hidden" name="group_id" value="{{ group.id }}">
+            <button class="btn btn-sm btn-outline-secondary" title="Zera o tempo decorrido e a velocidade média">
+                <i class="fas fa-rotate-left me-1"></i> Reiniciar cronômetro
+            </button>
+        </form>
+        <form method="POST" action="{{ url_for('monitor_group_delete') }}"
+              onsubmit="return confirm('Remover este grupo do acompanhamento?');">
+            <input type="hidden" name="group_id" value="{{ group.id }}">
+            <button class="btn btn-sm btn-outline-danger"><i class="fas fa-trash"></i></button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+{% for message in get_flashed_messages() %}
+<div class="alert alert-info py-2">{{ message }}</div>
+{% endfor %}
+
+<!-- Seleção das revistas -->
+<div class="collapse {{ '' if group else 'show' }} mb-4" id="groupPicker">
+    <form method="POST" action="{{ url_for('monitor_group_save') }}" class="card shadow-sm border-0">
+        <div class="card-body">
+            <div class="row g-3 align-items-end mb-3">
+                <div class="col-md-5">
+                    <label class="form-label small fw-bold text-muted text-uppercase">Nome do grupo</label>
+                    <input type="text" name="name" class="form-control" placeholder="Ex.: Lote de setembro"
+                           value="{{ group.name if group else '' }}">
+                </div>
+                <div class="col-md-4">
+                    <div class="form-check">
+                        <input class="form-check-input" type="checkbox" name="reset_timer" id="reset_timer" value="1">
+                        <label class="form-check-label small" for="reset_timer">
+                            Reiniciar o cronômetro ao salvar
+                        </label>
+                    </div>
+                </div>
+                <div class="col-md-3 text-end">
+                    {% if group %}<input type="hidden" name="group_id" value="{{ group.id }}">{% endif %}
+                    <button class="btn btn-primary w-100"><i class="fas fa-save me-1"></i> Salvar grupo</button>
+                </div>
+            </div>
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <input type="text" id="journalFilter" class="form-control form-control-sm" style="max-width: 320px;"
+                       placeholder="Filtrar por nome ou ID..." onkeyup="filterJournals()">
+                <span class="small text-muted"><span id="pickedCount">{{ selected_ids|length }}</span> marcada(s)</span>
+            </div>
+            <div class="row g-2" style="max-height: 320px; overflow-y: auto;" id="journalList">
+                {% for j in journals %}
+                <div class="col-md-4 journal-item" data-label="{{ j.id }} {{ j.name|lower }}">
+                    <div class="p-2 border rounded-2 d-flex align-items-center gap-2 {{ 'bg-light border-primary' if j.id in selected_ids else 'bg-white' }}">
+                        <input class="form-check-input mt-0 flex-shrink-0 journal-check" type="checkbox" name="journal_ids"
+                               value="{{ j.id }}" id="mon_{{ j.id }}" {{ 'checked' if j.id in selected_ids }}
+                               onchange="countPicked()">
+                        <label class="form-check-label text-truncate w-100 mb-0 small" for="mon_{{ j.id }}" title="{{ j.name }}">
+                            <span class="text-secondary fw-bold">#{{ j.id }}</span> {{ j.name }}
+                        </label>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+    </form>
+</div>
+
+{% if group %}
+{% set t = snap.totals %}
+<!-- Cartões -->
+<div class="row g-3 mb-3">
+    <div class="col-md-3">
+        <div class="card bg-dark text-white h-100 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75 small">Tempo corrido</h6>
+                <h2 class="fw-bold mb-0" id="kpiElapsed">{{ payload.elapsed_label }}</h2>
+                <small class="opacity-75">desde <span id="kpiStartedAt">—</span></small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-success text-white h-100 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75 small">Feito</h6>
+                <h2 class="fw-bold mb-0"><span id="kpiPct">{{ t.pct }}</span>%</h2>
+                <small class="opacity-75"><span id="kpiResolved">{{ num(t.resolved) }}</span> de <span id="kpiTarget">{{ num(t.target) }}</span> artigos</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-primary text-white h-100 shadow-sm">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase opacity-75 small">Falta</h6>
+                <h2 class="fw-bold mb-0" id="kpiEta">{{ payload.eta_label }}</h2>
+                <small class="opacity-75"><span id="kpiPending">{{ num(t.pending) }}</span> artigos na fila</small>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card bg-white h-100 shadow-sm border-primary">
+            <div class="card-body">
+                <h6 class="card-title text-uppercase text-muted small">Término previsto</h6>
+                <h2 class="fw-bold mb-0 text-primary" id="kpiEtaAt">—</h2>
+                <small class="text-muted">
+                    <span id="kpiRateNow">{{ payload.rate_now }}</span>/min agora ·
+                    média <span id="kpiRateAvg">{{ payload.rate_avg or '—' }}</span>/min
+                </small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="progress mb-1" style="height: 22px;">
+    <div class="progress-bar bg-success" id="barDone" style="width: {{ (t.done / t.target * 100) if t.target else 0 }}%">
+        <span id="barDoneLabel">{{ num(t.done) }} processados</span>
+    </div>
+    <div class="progress-bar bg-danger" id="barErrors" style="width: {{ ((t.errors + t.no_pdf) / t.target * 100) if t.target else 0 }}%"></div>
+</div>
+<p class="small text-muted mb-4">
+    <span id="sumLine">
+        {{ num(t.done) }} processados · {{ num(t.errors) }} com erro · {{ num(t.no_pdf) }} sem PDF ·
+        {{ num(t.queue_download) }} na fila de download · {{ num(t.to_discover) }} ainda a descobrir ·
+        {{ num(t.emails) }} e-mails ({{ num(t.emails_valid) }} válidos)
+    </span>
+    <br>
+    <span class="text-body-secondary">
+        Atualiza sozinha a cada 20s. A previsão usa a velocidade média desde o início do acompanhamento;
+        no ritmo dos últimos {{ payload.window_minutes }} minutos seria <strong id="etaNow">{{ payload.eta_now_label }}</strong>.
+        "A descobrir" vem da medição do site (Tamanho dos Periódicos) e só conta onde ainda há edições por abrir.
+    </span>
+</p>
+
+<!-- Tabela por revista -->
+<div class="card shadow-sm border-0">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Periódico</th>
+                    <th class="text-center">Situação</th>
+                    <th class="text-end">Processados</th>
+                    <th class="text-end">Erros</th>
+                    <th class="text-end">Fila</th>
+                    <th class="text-end">Alvo</th>
+                    <th class="text-end">E-mails</th>
+                    <th style="width: 160px;">Progresso</th>
+                    <th class="text-end">Previsão</th>
+                </tr>
+            </thead>
+            <tbody id="journalRows">
+                {% for r in payload.journals %}
+                <tr>
+                    <td><span class="text-secondary fw-bold small">#{{ r.id }}</span> {{ r.name }}</td>
+                    <td class="text-center">
+                        {% if r.finished %}<span class="badge bg-success">concluído</span>
+                        {% elif r.running %}<span class="badge bg-primary">rodando</span>
+                        {% else %}<span class="badge bg-secondary">aguardando</span>{% endif %}
+                    </td>
+                    <td class="text-end">{{ num(r.done) }}</td>
+                    <td class="text-end {{ 'text-danger' if r.errors }}">{{ num(r.errors) }}</td>
+                    <td class="text-end">{{ num(r.pending) }}</td>
+                    <td class="text-end text-muted">{{ num(r.target) }}</td>
+                    <td class="text-end">{{ num(r.emails) }} <span class="text-success small">({{ num(r.emails_valid) }})</span></td>
+                    <td>
+                        <div class="progress" style="height: 14px;">
+                            <div class="progress-bar {{ 'bg-success' if r.finished else '' }}" style="width: {{ r.pct }}%"></div>
+                        </div>
+                        <small class="text-muted">{{ r.pct }}%</small>
+                    </td>
+                    <td class="text-end small">{{ r.eta_label }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% else %}
+<div class="alert alert-secondary">
+    Nenhum grupo em acompanhamento. Marque as revistas acima e salve para começar a contar o tempo.
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const GROUP_ID = {{ group.id if group else 'null' }};
+    let snap = {{ payload|tojson }};
+
+    const fmt = n => (n === null || n === undefined) ? '-' : n.toLocaleString('pt-BR');
+
+    function filterJournals() {
+        const q = document.getElementById('journalFilter').value.toLowerCase();
+        document.querySelectorAll('.journal-item').forEach(el => {
+            el.style.display = el.dataset.label.includes(q) ? '' : 'none';
+        });
+    }
+
+    function countPicked() {
+        document.getElementById('pickedCount').textContent =
+            document.querySelectorAll('.journal-check:checked').length;
+    }
+
+    function durationLabel(seconds) {
+        if (seconds === null || seconds === undefined) return '—';
+        seconds = Math.max(0, Math.floor(seconds));
+        const d = Math.floor(seconds / 86400);
+        const h = Math.floor((seconds % 86400) / 3600);
+        const m = Math.floor((seconds % 3600) / 60);
+        if (d) return `${d}d ${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m`;
+        if (h) return `${h}h ${String(m).padStart(2, '0')}m`;
+        return `${m}m`;
+    }
+
+    // O cronômetro corre no navegador; o servidor só corrige a cada atualização.
+    let startedAt = snap.started_at ? new Date(snap.started_at) : null;
+    function tickClock() {
+        if (!startedAt) return;
+        const el = document.getElementById('kpiElapsed');
+        if (el) el.textContent = durationLabel((Date.now() - startedAt.getTime()) / 1000);
+    }
+
+    function statusBadge(r) {
+        if (r.finished) return '<span class="badge bg-success">concluído</span>';
+        if (r.running) return '<span class="badge bg-primary">rodando</span>';
+        return '<span class="badge bg-secondary">aguardando</span>';
+    }
+
+    function render(data) {
+        snap = data;
+        startedAt = data.started_at ? new Date(data.started_at) : null;
+        const t = data.totals;
+
+        document.getElementById('kpiPct').textContent = t.pct;
+        document.getElementById('kpiResolved').textContent = fmt(t.resolved);
+        document.getElementById('kpiTarget').textContent = fmt(t.target);
+        document.getElementById('kpiEta').textContent = data.eta_label;
+        document.getElementById('kpiPending').textContent = fmt(t.pending);
+        document.getElementById('kpiRateNow').textContent = data.rate_now;
+        document.getElementById('kpiRateAvg').textContent = data.rate_avg ?? '—';
+        document.getElementById('etaNow').textContent = data.eta_now_label;
+
+        if (startedAt) {
+            document.getElementById('kpiStartedAt').textContent =
+                startedAt.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+        }
+        document.getElementById('kpiEtaAt').textContent = data.eta_at
+            ? new Date(data.eta_at).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })
+            : '—';
+
+        const pctDone = t.target ? (t.done / t.target * 100) : 0;
+        const pctErr = t.target ? ((t.errors + t.no_pdf) / t.target * 100) : 0;
+        document.getElementById('barDone').style.width = pctDone + '%';
+        document.getElementById('barErrors').style.width = pctErr + '%';
+        document.getElementById('barDoneLabel').textContent = fmt(t.done) + ' processados';
+        document.getElementById('sumLine').textContent =
+            `${fmt(t.done)} processados · ${fmt(t.errors)} com erro · ${fmt(t.no_pdf)} sem PDF · ` +
+            `${fmt(t.queue_download)} na fila de download · ${fmt(t.to_discover)} ainda a descobrir · ` +
+            `${fmt(t.emails)} e-mails (${fmt(t.emails_valid)} válidos)`;
+
+        document.getElementById('journalRows').innerHTML = data.journals.map(r => `
+            <tr>
+                <td><span class="text-secondary fw-bold small">#${r.id}</span> ${r.name}</td>
+                <td class="text-center">${statusBadge(r)}</td>
+                <td class="text-end">${fmt(r.done)}</td>
+                <td class="text-end ${r.errors ? 'text-danger' : ''}">${fmt(r.errors)}</td>
+                <td class="text-end">${fmt(r.pending)}</td>
+                <td class="text-end text-muted">${fmt(r.target)}</td>
+                <td class="text-end">${fmt(r.emails)} <span class="text-success small">(${fmt(r.emails_valid)})</span></td>
+                <td>
+                    <div class="progress" style="height: 14px;">
+                        <div class="progress-bar ${r.finished ? 'bg-success' : ''}" style="width: ${r.pct}%"></div>
+                    </div>
+                    <small class="text-muted">${r.pct}%</small>
+                </td>
+                <td class="text-end small">${r.eta_label}</td>
+            </tr>`).join('');
+    }
+
+    async function refresh() {
+        if (!GROUP_ID) return;
+        try {
+            const resp = await fetch(`{{ url_for('monitor_group_data') }}?group_id=${GROUP_ID}`);
+            if (resp.ok) render(await resp.json());
+        } catch (e) { /* painel segue com os últimos números */ }
+    }
+
+    if (GROUP_ID) {
+        render(snap);
+        setInterval(tickClock, 1000);
+        setInterval(refresh, 20000);
+    }
+</script>
+{% endblock %}
